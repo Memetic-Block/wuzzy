@@ -35,6 +35,7 @@ Wuzzy Search is a modular system consisting of several interconnected components
 
 ### Demo Deployment
 
+- Demo Video: https://www.youtube.com/watch?v=V_kjW0JcP1U
 - Hyperbeam node: https://wuzzy-hyperbeam.hel.memeticblock.net
 - Primary Nest Process Id: `1X_nt5ctoJTw6Dc3M6x34_lFTWGTl-jhW8MY7Vff4fA`
 - Crawler 1 Process Id: `8Or2nlJ-8jDzen1FWC1h11E6IYvXOROC2oRjBJLTKE8`
