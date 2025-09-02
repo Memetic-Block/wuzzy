@@ -32,3 +32,11 @@ Wuzzy Search is a modular system consisting of several interconnected components
 ## Documentation
 
 - **API Documentation**: Available in the `wuzzy-docs` project or at [Wuzzy Docs](https://docs_wuzzy.arweave.net)
+
+### Demo Deployment
+
+- Hyperbeam node: https://wuzzy-hyperbeam.hel.memeticblock.net
+- Primary Nest Process Id: `1X_nt5ctoJTw6Dc3M6x34_lFTWGTl-jhW8MY7Vff4fA`
+- Crawler 1 Process Id: `8Or2nlJ-8jDzen1FWC1h11E6IYvXOROC2oRjBJLTKE8`
+- Crawler 2 Process Id: `CbumKxXkF3VflozGBWMfbrVfB7s48lJPb3mgw6wAo7g`
+- Crawler 3 Process Id: `ttBl4Hru8cdVhXsFoFdyBIDS71nch6IKB0n5dNJUqfc`
