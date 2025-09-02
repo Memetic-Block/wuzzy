@@ -167,34 +167,6 @@ interface WuzzyNestSearchResults {
 - **Configurable Page Size**: Default 10 results, customizable via parameters
 - **Result Metadata**: Includes total hit counts and pagination status
 
-### Message-based Internal API
-
-Internal component communication uses structured AO messages:
-
-#### Document Indexing
-```lua
-{
-  target = nestId,
-  action = 'Index-Document',
-  data = documentContent,
-  ['document-url'] = url,
-  ['document-last-crawled-at'] = timestamp,
-  ['document-content-type'] = mimeType,
-  ['document-title'] = title,
-  ['document-description'] = description
-}
-```
-
-#### Crawler Management
-```lua
-{
-  target = nestId,
-  action = 'Add-Crawler',
-  ['crawler-id'] = crawlerProcessId,
-  ['crawler-name'] = friendlyName
-}
-```
-
 ## Performance and Scalability
 
 ### Horizontal Scaling Model
