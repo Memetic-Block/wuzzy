@@ -41,3 +41,9 @@ Note: these processes are deployed using `hyper-aos`
 - Crawler 1 Process Id: `8Or2nlJ-8jDzen1FWC1h11E6IYvXOROC2oRjBJLTKE8`
 - Crawler 2 Process Id: `CbumKxXkF3VflozGBWMfbrVfB7s48lJPb3mgw6wAo7g`
 - Crawler 3 Process Id: `ttBl4Hru8cdVhXsFoFdyBIDS71nch6IKB0n5dNJUqfc`
+
+You can also inspect these processes from the Wuzzy site:
+- https://wuzzy.arweave.net/nest/1X_nt5ctoJTw6Dc3M6x34_lFTWGTl-jhW8MY7Vff4fA
+- https://wuzzy.arweave.net/crawler/8Or2nlJ-8jDzen1FWC1h11E6IYvXOROC2oRjBJLTKE8
+- https://wuzzy.arweave.net/crawler/CbumKxXkF3VflozGBWMfbrVfB7s48lJPb3mgw6wAo7g
+- https://wuzzy.arweave.net/crawler/ttBl4Hru8cdVhXsFoFdyBIDS71nch6IKB0n5dNJUqfc
