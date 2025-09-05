@@ -1,6 +1,6 @@
 # Wuzzy Monorepo
 
-This repository contains links to resources & the core components of Wuzzy Search, a decentralized search engine application built on the Arweave and AO.
+This repository contains links to resources & the core components of Wuzzy Search, a decentralized search engine application built on Arweave and AO.
 
 ## Website
 To check out searching in action you can search using the Wuzzy site hosted at [https://wuzzy.arweave.net](https://wuzzy.arweave.net)
