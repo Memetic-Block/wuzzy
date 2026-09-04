@@ -1,5 +1,7 @@
 import type { DataSourceOptions } from 'typeorm';
-import { ExampleEntity } from './example.entity';
+import { ChunkEntity } from './chunk.entity';
+import { DocumentEntity } from './document.entity';
+import { FetchLogEntity } from './fetch-log.entity';
 
 // Single source of truth for the Postgres connection. Shared by the NestJS
 // TypeOrmModule (database.module.ts) and the standalone DataSource that the
@@ -15,11 +17,11 @@ export function buildDataSourceOptions(env = process.env): DataSourceOptions {
     username: env.POSTGRES_USER ?? 'app',
     password: env.POSTGRES_PASSWORD ?? 'app',
     database: env.POSTGRES_DB ?? 'app',
-    entities: [ExampleEntity],
+    entities: [DocumentEntity, FetchLogEntity, ChunkEntity],
     migrations: [__dirname + '/migrations/*.{ts,js}'],
-    // Auto-create the schema from entities. Defaults on outside production;
-    // DB_SYNCHRONIZE overrides it (compose.full.yml sets it true so the demo
-    // works without migrations). In stage/live leave it off and use migrations.
-    synchronize: (env.DB_SYNCHRONIZE ?? String(env.NODE_ENV !== 'production')) === 'true',
+    // Never on, in any environment. The schema carries a `vector` extension and
+    // an hnsw index that entities cannot express, so migrations own it outright
+    // and synchronize would only drift or drop things.
+    synchronize: false,
   };
 }

@@ -1,7 +1,8 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { ExampleController } from './example.controller';
-import { ExampleEntity } from './example.entity';
+import { ChunkEntity } from './chunk.entity';
+import { DocumentEntity } from './document.entity';
+import { FetchLogEntity } from './fetch-log.entity';
 import { buildDataSourceOptions } from './typeorm.config';
 
 @Module({
@@ -16,9 +17,8 @@ import { buildDataSourceOptions } from './typeorm.config';
         migrationsRun: process.env.DB_MIGRATIONS_RUN === 'true',
       }),
     }),
-    // Makes the ExampleEntity repository injectable into ExampleController.
-    TypeOrmModule.forFeature([ExampleEntity]),
+    TypeOrmModule.forFeature([DocumentEntity, FetchLogEntity, ChunkEntity]),
   ],
-  controllers: [ExampleController],
+  exports: [TypeOrmModule],
 })
 export class DatabaseModule {}
