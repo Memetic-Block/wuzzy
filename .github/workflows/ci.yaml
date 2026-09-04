@@ -95,6 +95,12 @@ jobs:
 
       - name: Build and push image
         uses: docker/build-push-action@v6
+        env:
+          # The action otherwise uploads a .dockerbuild build record artifact and
+          # writes a build summary onto every run. The registry is the artifact
+          # we care about.
+          DOCKER_BUILD_SUMMARY: false
+          DOCKER_BUILD_RECORD_UPLOAD: false
         with:
           context: .
           file: apps/${{ matrix.app }}/Dockerfile
