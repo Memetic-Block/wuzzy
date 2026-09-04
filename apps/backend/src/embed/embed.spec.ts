@@ -4,6 +4,7 @@ import { DataSource } from 'typeorm';
 import { ChunkEntity } from '../database/chunk.entity';
 import { DocumentEntity } from '../database/document.entity';
 import { buildDataSourceOptions } from '../database/typeorm.config';
+import { truncateWuzzyTables } from '../testing/database';
 import { chunk } from './chunker';
 import { embedPending } from './embed';
 import { DEFAULT_DIMENSIONS, type Embedder } from './embedder';
@@ -33,13 +34,12 @@ beforeAll(async () => {
     if (process.env.CI) throw error;
     unreachable = (error as Error).message;
   }
+  await truncateWuzzyTables(dataSource);
 });
 
 afterEach(async () => {
   calls = 0;
-  if (!dataSource) return;
-  await dataSource.query('DELETE FROM chunks');
-  await dataSource.query('DELETE FROM documents');
+  await truncateWuzzyTables(dataSource);
 });
 
 afterAll(async () => {

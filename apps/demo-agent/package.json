@@ -1,0 +1,11 @@
+{
+  "name": "demo-agent",
+  "private": true,
+  "scripts": {
+    "start": "bun src/main.ts"
+  },
+  "dependencies": {
+    "viem": "^2.56.3",
+    "x402-fetch": "^1.2.0"
+  }
+}

@@ -5,6 +5,7 @@ import { DataSource } from 'typeorm';
 import { DocumentEntity } from '../database/document.entity';
 import { FetchLogEntity } from '../database/fetch-log.entity';
 import { buildDataSourceOptions } from '../database/typeorm.config';
+import { truncateWuzzyTables } from '../testing/database';
 import { scenario } from '../testing/scenario';
 import { crawl } from './crawler';
 import { PROSE, page, startMockSite, type MockSite } from './mock-site';
@@ -24,13 +25,12 @@ beforeAll(async () => {
     if (process.env.CI) throw error;
     unreachable = (error as Error).message;
   }
+  await truncateWuzzyTables(dataSource);
 });
 
 afterEach(async () => {
   while (sites.length > 0) await sites.pop()?.close();
-  if (!dataSource) return;
-  await dataSource.query('DELETE FROM fetch_log');
-  await dataSource.query('DELETE FROM documents');
+  await truncateWuzzyTables(dataSource);
 });
 
 afterAll(async () => {

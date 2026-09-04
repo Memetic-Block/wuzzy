@@ -67,6 +67,19 @@ Only hashes and metadata are attested: `url`, `protocol`, `protocolVersion`, `co
 `rawHash`, `fetchedAt`. Never content. A build-time check rejects a schema that would carry
 any.
 
+## Demo agent
+
+[apps/demo-agent](apps/demo-agent/) is a paying client, and doubles as the integration
+quickstart for anyone pointing an agent at Wuzzy. It depends on nothing in `apps/backend`,
+so it can be split out into its own repository whenever that is useful.
+
+```sh
+bun run demo wallet                                   # fresh key, stored outside the repo
+bun run demo search "how do I deploy a contract"      # 402 -> pay -> results
+```
+
+Against an endpoint in dev mode it needs no wallet at all.
+
 ## Local development
 
 Requires [Bun](https://bun.sh) and Podman or Docker for Postgres.

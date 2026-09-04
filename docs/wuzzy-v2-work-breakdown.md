@@ -28,8 +28,10 @@ BDD: Gherkin scenario files live in `contracts/`; each work item's session refer
 
 **W1.1 — Repo init on Forgejo** — `wuzzy` private; `CLAUDE.md` via /init then hand-edited invariants (honest UA / no stealth; canonicalize v1 frozen after first attestation; hashes-only-onchain; no funded keys in repo/sessions/VPS; agents never touch main; contracts/ features are the definition of done).
 ✓ AC: main protected (PR-only, no self-approve, signed commits required); mirror to public GitHub reflects main within minutes of merge.
+
 **W1.2 — CI workflow on Forgejo runner** — install, typecheck, scenario tests (excluding @mainnet/@manual tags).
 ✓ AC: green run on a trivial PR authored by Claude Code under the agent identity, end-to-end (the green-light gate). *Note: existing `mb-dev-hermes-claude` account/token/signing key carry over as-is — optionally rename the account's harness segment to match Claude Code; cosmetic, not blocking.*
+
 **W1.3 — Compose + schema** — pgvector service, schema.sql auto-applied.
 ✓ AC: `docker compose up` → psql shows documents/fetch_log/chunks with hnsw index.
 
@@ -37,8 +39,10 @@ BDD: Gherkin scenario files live in `contracts/`; each work item's session refer
 
 **W2.1 — Canonicalizer v1 (T1)** — implement to W0.1 vectors; PROTOCOL/VERSION constants; module documented as frozen-once-attested.
 ✓ AC: all vectors pass in CI; no other module computes hashes.
+
 **W2.2 — Crawler** — Crawlee, honest UA, robots→sitemaps→same-host queue, thin-page filter, provenance writes per W0.2, re-crawl invalidation logic.
 ✓ AC: W0.2 fetch scenarios pass (mock server fixtures); full crawl of seeds completes without manual intervention; fetch_log row for every fetch.
+
 **W2.3 — Seeds curation [J]** — final seeds.json (docs.base.org, CDP/x402 docs, blog, + picks); spot-check ≥15 extracted pages for quality.
 ✓ AC: ≥3k documents indexed-quality corpus, or consciously accepted smaller.
 
@@ -46,8 +50,10 @@ BDD: Gherkin scenario files live in `contracts/`; each work item's session refer
 
 **W3.1 — Embed pass** — chunker + OpenAI-compatible embedder, restartable, embedded_at bookkeeping.
 ✓ AC: re-run is a no-op on unchanged corpus; changed doc re-embeds (per W0.2).
+
 **W3.2 — /search** — vector topK joined to documents; response shape per W0.3 provenance block.
 ✓ AC: T3 smoke — 10 canned Base-ecosystem queries return sane top-3 (Jim eyeball); p95 latency < 1.5s local.
+
 **W3.3 — Freeze v1 [J]** — final review of canonicalizer; VERIFY.md finalized to match implementation exactly.
 ✓ AC: VERIFY.md + vectors + code agree; freeze noted in AGENTS.md.
 
@@ -55,8 +61,10 @@ BDD: Gherkin scenario files live in `contracts/`; each work item's session refer
 
 **W4.1 — Schema registration [J]** — attester wallet (gas-dust only, VPS never holds it), register on Base mainnet.
 ✓ AC: schema UID visible on base.easscan.org; in .env.
+
 **W4.2 — Batch attestor [CC code, J run]** — multiAttest batches, UID backfill, idempotent.
 ✓ AC: full corpus attested; spot-check 5 UIDs decode correctly on easscan; re-run attests only new/changed docs.
+
 **W4.3 — verify CLI (T2)** — implements W0.2 verify scenarios.
 ✓ AC: exit codes per contract; MATCH on 5 random indexed URLs; MISMATCH demonstrated on a mutated fixture.
 
@@ -64,15 +72,19 @@ BDD: Gherkin scenario files live in `contracts/`; each work item's session refer
 
 **W5.1 — x402 meter [CC code, J config]** — adapter verified against current x402 docs, mainnet config, PAY_TO fresh address.
 ✓ AC: W0.3 scenarios pass against mainnet (one real paid query settles; Basescan link recorded).
+
 **W5.2 — Demo agent repo [CC]** — public GitHub-native `wuzzy-demo-agent`: x402-fetch client, fresh wallet flow, README as quickstart.
 ✓ AC: clean-machine run: fund fresh wallet → pay → results with attestation UIDs printed; recorded as asciinema.
+
 **W5.3 — Bazaar listing [J]**
 ✓ AC: Wuzzy discoverable on the x402 Bazaar (cuttable to post-submit if blocked).
 
 ## D6 — Evidence pack (Days 6–7) [J + S]
 
 **W6.1 — Video** — 2-min: 402→pay→results→easscan→Basescan loop + why-us beats (script in worksheet; Slava edits).
+
 **W6.2 — Numbers** — paid queries, wallets, docs attested, Basescan/easscan/schema links → worksheet traction + Dune-lite (optional).
+
 **W6.3 — Submit Mon Sept 8.**
 ✓ AC: every claim in the application true-on-submission; demo URL live; mirror public with 7 days of history.
 

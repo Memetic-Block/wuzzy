@@ -6,6 +6,7 @@ import { crawl } from '../crawl/crawler';
 import { PROSE, page, startMockSite, type MockSite } from '../crawl/mock-site';
 import { DocumentEntity } from '../database/document.entity';
 import { buildDataSourceOptions } from '../database/typeorm.config';
+import { truncateWuzzyTables } from '../testing/database';
 import { scenario } from '../testing/scenario';
 import { EXIT_MATCH, EXIT_MISMATCH, EXIT_UNINDEXED, formatVerifyResult, verify } from './verify';
 
@@ -23,13 +24,12 @@ beforeAll(async () => {
     if (process.env.CI) throw error;
     unreachable = (error as Error).message;
   }
+  await truncateWuzzyTables(dataSource);
 });
 
 afterEach(async () => {
   while (sites.length > 0) await sites.pop()?.close();
-  if (!dataSource) return;
-  await dataSource.query('DELETE FROM fetch_log');
-  await dataSource.query('DELETE FROM documents');
+  await truncateWuzzyTables(dataSource);
 });
 
 afterAll(async () => {

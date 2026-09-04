@@ -11,6 +11,7 @@ import { buildDataSourceOptions } from '../database/typeorm.config';
 import { toVectorLiteral, type Embedder } from '../embed/embedder';
 import { SearchController } from '../search/search.controller';
 import { SearchService } from '../search/search.service';
+import { truncateWuzzyTables } from '../testing/database';
 import { scenario } from '../testing/scenario';
 import { PAYMENT_CONFIG, type PaymentConfig } from './payment.config';
 import { PaymentService } from './payment.service';
@@ -47,6 +48,7 @@ beforeAll(async () => {
     unreachable = (error as Error).message;
     return;
   }
+  await truncateWuzzyTables(dataSource);
   facilitator = await startMockFacilitator();
 });
 
@@ -56,10 +58,7 @@ afterAll(async () => {
 });
 
 afterEach(async () => {
-  if (!dataSource) return;
-  await dataSource.query('DELETE FROM chunks');
-  await dataSource.query('DELETE FROM fetch_log');
-  await dataSource.query('DELETE FROM documents');
+  await truncateWuzzyTables(dataSource);
   facilitator?.reset();
 });
 

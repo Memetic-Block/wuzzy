@@ -46,6 +46,7 @@ bun run dev:frontend              # static build + dev server on :8080, proxies 
 bun run wuzzy crawl <seed-url>... # pipeline stages are CLI commands
 bun run wuzzy embed
 bun run wuzzy verify <url>        # exits 0 match, 1 mismatch, 2 not indexed
+bun run demo search "<query>"     # the paying client; no wallet needed in dev mode
 
 bun test                          # everything
 bun test apps/backend/src/canonicalize          # one directory
@@ -67,8 +68,16 @@ bun run migration:show
 
 A monorepo of bun workspaces. `apps/backend` is a NestJS API on the Bun runtime with
 TypeORM against Postgres + pgvector; `apps/frontend` pre-renders JSX pages to static HTML
-at build time and is served by nginx. Pipeline stages (crawl, embed, attest, verify) are
-CLI commands, not queue workers, so there is no broker in the stack.
+at build time and is served by nginx; `apps/demo-agent` is a paying client. Pipeline stages
+(crawl, embed, attest, verify) are CLI commands, not queue workers, so there is no broker in
+the stack.
+
+**apps/demo-agent must not import from apps/backend.** It is the integration quickstart a
+third party reads, so it has to demonstrate what an outsider can build with the public API
+alone, and it is expected to be split into its own repository by `git subtree split`. A
+shared import would make both of those false. Its wallet file defaults to
+`~/.config/wuzzy/demo-wallet.json`, outside the working tree, so a funded key cannot reach a
+commit.
 
 **Contracts drive the build.** `contracts/*.feature` files are the spec of record, split
 out of [docs/wuzzy-bdd-contracts.md](docs/wuzzy-bdd-contracts.md). Tests declare which
@@ -105,6 +114,11 @@ partial work-queue indexes it cannot model. Entities cover the columns and are e
 against the migrated schema by
 [schema.spec.ts](apps/backend/src/database/schema.spec.ts), which skips when the database is
 unreachable locally but fails outright under `CI`.
+
+Specs that touch the database truncate in `beforeAll` as well as `afterEach`, via
+[testing/database.ts](apps/backend/src/testing/database.ts). A spec that counts rows must not
+depend on a pristine database, or a leftover row from a manual `wuzzy crawl` fails it for
+reasons unrelated to the code.
 
 `documents` holds latest state per URL; `fetch_log` is append-only and records every fetch
 actually performed; `chunks` carries the embeddings. Content changes clear `embedded_at` and

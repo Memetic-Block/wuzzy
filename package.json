@@ -11,7 +11,8 @@
     "test": "bun test",
     "scenarios": "bun scripts/scenario-report.ts",
     "typecheck": "bunx tsc --noEmit",
-    "wuzzy": "bun apps/backend/src/cli/wuzzy.ts"
+    "wuzzy": "bun apps/backend/src/cli/wuzzy.ts",
+    "demo": "bun apps/demo-agent/src/main.ts"
   },
   "devDependencies": {
     "@types/bun": "^1.2.0",

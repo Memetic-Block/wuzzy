@@ -3,6 +3,7 @@ import 'reflect-metadata';
 import { DataSource } from 'typeorm';
 import { DocumentEntity } from '../database/document.entity';
 import { buildDataSourceOptions } from '../database/typeorm.config';
+import { truncateWuzzyTables } from '../testing/database';
 import {
   attestPending,
   createEasSubmitter,
@@ -23,12 +24,11 @@ beforeAll(async () => {
     if (process.env.CI) throw error;
     unreachable = (error as Error).message;
   }
+  await truncateWuzzyTables(dataSource);
 });
 
 afterEach(async () => {
-  if (!dataSource) return;
-  await dataSource.query('DELETE FROM chunks');
-  await dataSource.query('DELETE FROM documents');
+  await truncateWuzzyTables(dataSource);
 });
 
 afterAll(async () => {
