@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'bun:test';
 import 'reflect-metadata';
-import { LogLevel, log as crawleeLog } from 'crawlee';
+import { LogLevel, log as crawleeLog } from '@crawlee/basic';
 import { DataSource } from 'typeorm';
 import { DocumentEntity } from '../database/document.entity';
 import { FetchLogEntity } from '../database/fetch-log.entity';

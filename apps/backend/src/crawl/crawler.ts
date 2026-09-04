@@ -1,4 +1,4 @@
-import { BasicCrawler, Configuration } from 'crawlee';
+import { BasicCrawler, Configuration } from '@crawlee/basic';
 import type { DataSource } from 'typeorm';
 import { JSDOM } from 'jsdom';
 import { canonicalize } from '../canonicalize/v1';

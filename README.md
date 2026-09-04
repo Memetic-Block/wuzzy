@@ -136,9 +136,18 @@ podman build -f apps/backend/Dockerfile  -t wuzzy-backend .
 podman build -f apps/frontend/Dockerfile -t wuzzy-frontend .
 ```
 
-- Backend: `oven/bun:1`, runs the TypeScript sources directly, listens on `$PORT` (default
-  3000), healthcheck on `/healthz`.
-- Frontend: build stage pre-renders to `dist/`, final stage is `nginx:1-alpine` on port 80.
+- Backend (~494 MB): `oven/bun:1-alpine`, runs the TypeScript sources directly, listens on
+  `$PORT` (default 3000), healthcheck on `/healthz`.
+- Frontend (~70 MB): build stage pre-renders to `dist/`, final stage is `nginx:1-alpine` on
+  port 80.
+
+The backend install uses `--linker=hoisted` and then deletes two dependency trees that
+nothing in the image imports: the browser wallet stack `x402` pulls in through `wagmi`, and
+the hardhat/solc build toolchain `eas-sdk` pulls in through `eas-contracts`. Together they
+were more than a third of the image. A `smoke` build stage loads every entry point after the
+prune, and the runtime stage takes `node_modules` from that stage rather than from the install
+stage, so the check cannot be skipped: removing something that is actually needed fails the
+build instead of the deploy.
 
 ## CI / publishing
 

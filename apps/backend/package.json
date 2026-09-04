@@ -13,6 +13,8 @@
     "wuzzy": "bun src/cli/wuzzy.ts"
   },
   "dependencies": {
+    "@crawlee/basic": "3.18.1",
+    "@crawlee/utils": "3.18.1",
     "@ethereum-attestation-service/eas-sdk": "^2.10.0",
     "@mozilla/readability": "^0.6.0",
     "@nestjs/common": "^11.0.0",
@@ -20,7 +22,6 @@
     "@nestjs/core": "^11.0.0",
     "@nestjs/platform-express": "^11.0.0",
     "@nestjs/typeorm": "^11.0.0",
-    "crawlee": "^3.18.1",
     "ethers": "^6.17.0",
     "jsdom": "^30.0.1",
     "pg": "^8.13.0",

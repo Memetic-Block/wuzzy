@@ -1,14 +1,16 @@
 # Build from the repository root:
 #   docker build -f apps/frontend/Dockerfile .
 
-FROM docker.io/oven/bun:1 AS build
+# Alpine build stage: nothing here needs glibc, and the layer is not shipped
+# anyway since the runtime stage is nginx.
+FROM docker.io/oven/bun:1-alpine AS build
 WORKDIR /app
 
 # Workspace-aware install (dev deps included — Tailwind runs at build time).
 COPY package.json bun.lock ./
 COPY apps/backend/package.json ./apps/backend/
 COPY apps/frontend/package.json ./apps/frontend/
-RUN bun install --frozen-lockfile
+RUN bun install --frozen-lockfile --linker=hoisted
 
 COPY tsconfig.json tsconfig.base.json ./
 COPY apps/frontend ./apps/frontend

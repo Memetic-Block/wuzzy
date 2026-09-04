@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect } from 'bun:test';
 import 'reflect-metadata';
-import { LogLevel, log as crawleeLog } from 'crawlee';
+import { LogLevel, log as crawleeLog } from '@crawlee/basic';
 import { DataSource } from 'typeorm';
 import { crawl } from '../crawl/crawler';
 import { PROSE, page, startMockSite, type MockSite } from '../crawl/mock-site';

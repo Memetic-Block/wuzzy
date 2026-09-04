@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { PROTOCOL, PROTOCOL_VERSION } from '../canonicalize/v1';
@@ -24,6 +24,9 @@ export interface SearchResult {
 
 export class EmptyQueryError extends Error {}
 
+/** DI token for the embedder, so Nest has something concrete to inject. */
+export const EMBEDDER = Symbol('EMBEDDER');
+
 interface Row {
   url: string;
   title: string | null;
@@ -42,8 +45,10 @@ export class SearchService {
 
   constructor(
     @InjectDataSource() private readonly dataSource: DataSource,
-    embedder?: Embedder,
+    @Inject(EMBEDDER) embedder?: Embedder,
   ) {
+    // Still defaulted so the service is usable outside a Nest context, e.g. from
+    // the CLI, but the token is what makes it resolvable by the injector.
     this.embedder = embedder ?? createEmbedder();
   }
 

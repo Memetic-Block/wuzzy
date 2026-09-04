@@ -1,4 +1,4 @@
-import { RobotsTxtFile } from 'crawlee';
+import { RobotsTxtFile } from '@crawlee/utils';
 import type { Fetcher } from './http';
 import { ROBOTS_AGENT } from './user-agent';
 

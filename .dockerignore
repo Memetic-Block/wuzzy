@@ -1,5 +1,7 @@
-node_modules
-dist
+# Docker matches these at the root only unless globbed, and the workspace apps
+# each have their own node_modules full of symlinks that break inside an image.
+**/node_modules
+**/dist
 .env
 .git
 .github
