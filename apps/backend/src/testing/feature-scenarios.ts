@@ -10,7 +10,11 @@ const SPEC_ROOTS = [join(REPO_ROOT, 'apps/backend/src'), join(REPO_ROOT, 'apps/f
  * same commit that lands its implementation; until then its scenarios are
  * reported but not enforced, so unbuilt scope never blocks the build.
  */
-export const ENFORCED_FEATURES = new Set(['canonicalize-v1.feature', 'provenance.feature']);
+export const ENFORCED_FEATURES = new Set([
+  'canonicalize-v1.feature',
+  'payment.feature',
+  'provenance.feature',
+]);
 
 /** Tags that keep a scenario out of CI: a human runs these against mainnet. */
 export const HUMAN_ONLY_TAGS = ['@mainnet', '@manual'];

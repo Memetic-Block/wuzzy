@@ -38,6 +38,25 @@ bun run scenarios   # coverage per feature file
 Scenarios tagged `@mainnet @manual` are run by a human against Base mainnet. CI never runs
 them, and a test claiming one of those names fails the build.
 
+## Pipeline
+
+Stages are CLI commands, not queue workers, so a run is something you start, watch, and can
+re-run idempotently.
+
+```sh
+bun run wuzzy crawl https://docs.base.org   # fetch, canonicalize, write provenance
+bun run wuzzy embed                         # chunk and embed whatever is pending
+bun run wuzzy verify <url>                  # re-derive the hash for one indexed URL
+```
+
+`verify` exits 0 on a match, 1 on a mismatch, and 2 when the URL is not indexed, so it drops
+straight into a script.
+
+Each stage is restartable because its work queue is a query rather than external state.
+`embed` picks up documents with a null `embedded_at`, and the crawler nulls that column again
+whenever content changes, so a re-run over an unchanged corpus does nothing and a changed page
+is re-embedded without anyone tracking what already ran.
+
 ## Local development
 
 Requires [Bun](https://bun.sh) and Podman or Docker for Postgres.
@@ -72,6 +91,10 @@ indexes it cannot model.
 | `documents` | Latest state per URL: canonical content, both hashes, protocol version, embed and attestation bookkeeping |
 | `fetch_log` | Append-only record of every fetch actually performed |
 | `chunks` | Embeddable slices with a `vector(1536)` column and an hnsw index |
+
+`/search` runs vector top-k over `chunks`, collapses to the best chunk per document, and joins
+back to `documents` so every result carries the provenance block a paying agent needs to check
+the claim itself.
 
 Content changes clear `embedded_at` and `attestation_uid`, which is what makes the embed and
 attest passes idempotent.

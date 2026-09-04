@@ -43,6 +43,10 @@ bun install
 bun run dev:backend               # NestJS with watch on :3000
 bun run dev:frontend              # static build + dev server on :8080, proxies /api → :3000
 
+bun run wuzzy crawl <seed-url>... # pipeline stages are CLI commands
+bun run wuzzy embed
+bun run wuzzy verify <url>        # exits 0 match, 1 mismatch, 2 not indexed
+
 bun test                          # everything
 bun test apps/backend/src/canonicalize          # one directory
 bun test --test-name-pattern "thin pages"       # one scenario by name
@@ -106,6 +110,21 @@ unreachable locally but fails outright under `CI`.
 actually performed; `chunks` carries the embeddings. Content changes clear `embedded_at` and
 `attestation_uid` so the embed and attest passes pick the document up again, which is what
 makes both passes idempotent.
+
+**Crawlee schedules; we do the fetching.** [crawl/crawler.ts](apps/backend/src/crawl/crawler.ts)
+uses `BasicCrawler` for the request queue, concurrency and retries, but every request goes
+through [crawl/http.ts](apps/backend/src/crawl/http.ts). Two reasons, both load-bearing:
+Crawlee's HTTP crawlers hand back a decoded string, which does not reproduce the origin's
+bytes for a page that is not UTF-8 and would therefore corrupt the raw hash; and owning the
+fetch is what makes the honest user-agent checkable on every request rather than on the ones a
+hook happens to cover. robots.txt and sitemaps are fetched the same way, then parsed.
+
+**The meter mirrors the reference x402 middleware.**
+[payment/payment.service.ts](apps/backend/src/payment/payment.service.ts) follows the same
+sequence as `x402-express`: build requirements, 402 when the header is absent, malformed or
+unmatched, verify with the facilitator, and settle only after the handler produced a response,
+so a failed query is never charged for. Scenarios run against a mock facilitator; real
+settlement is `@mainnet @manual`.
 
 ## Conventions
 
