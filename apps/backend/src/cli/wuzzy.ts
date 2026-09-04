@@ -17,6 +17,7 @@ import { formatVerifyResult, verify } from '../verify/verify';
 const USAGE = `wuzzy - provable crawl pipeline
 
   wuzzy crawl <seed-url>...   crawl seeds and write the provenance trail
+                              --max=<n> caps pages fetched, for a trial run
   wuzzy embed                 embed every document the crawler left pending
   wuzzy attest                attest every embedded document that has no UID yet
   wuzzy verify <url>          re-derive the hash for one indexed URL
@@ -36,11 +37,18 @@ async function main(argv: readonly string[]): Promise<number> {
   try {
     switch (command) {
       case 'crawl': {
-        if (args.length === 0) {
+        const maxFlag = args.find((arg) => arg.startsWith('--max='));
+        const seeds = args.filter((arg) => !arg.startsWith('--'));
+        if (seeds.length === 0) {
           console.error('crawl needs at least one seed URL');
           return 1;
         }
-        const summary = await crawl(dataSource, { seeds: args });
+        const maxRequests = maxFlag ? Number(maxFlag.slice('--max='.length)) : undefined;
+        if (maxRequests !== undefined && (!Number.isFinite(maxRequests) || maxRequests < 1)) {
+          console.error('--max must be a positive number');
+          return 1;
+        }
+        const summary = await crawl(dataSource, { seeds, maxRequests });
         console.log(
           `created ${summary.created}  changed ${summary.changed}  ` +
             `unchanged ${summary.unchanged}  skipped ${summary.skipped}  failed ${summary.failed}`,
