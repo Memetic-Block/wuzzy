@@ -11,7 +11,11 @@ describe('static build', () => {
     const index = await Bun.file(join(distDir, 'index.html')).text();
     expect(index).toStartWith('<!doctype html>');
     expect(index).toContain('<title>Wuzzy</title>');
+    expect(index).toContain('id="search-form"');
     expect(index).toContain('htmx.min.js');
+
+    // The search page is inert without its client script.
+    expect(await Bun.file(join(distDir, 'search.js')).exists()).toBe(true);
 
     expect(await Bun.file(join(distDir, 'htmx.min.js')).exists()).toBe(true);
 

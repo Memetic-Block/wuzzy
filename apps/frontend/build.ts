@@ -71,7 +71,11 @@ function serve() {
     async fetch(req) {
       const url = new URL(req.url);
       if (url.pathname.startsWith('/api/')) {
-        return fetch(new Request(backend + url.pathname + url.search, req));
+        // Strip /api so the backend keeps a clean public shape: the browser
+        // calls /api/search, the API itself is /search, and the demo agent and
+        // the x402 resource URL name the same path a third party would.
+        const path = url.pathname.slice('/api'.length);
+        return fetch(new Request(backend + path + url.search, req));
       }
       const path = url.pathname === '/' ? '/index.html' : url.pathname;
       for (const candidate of [path, `${path}.html`]) {

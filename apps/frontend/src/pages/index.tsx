@@ -8,10 +8,33 @@ export default () => (
       A search index for AI agents, where every result carries onchain proof of what was
       crawled and when.
     </p>
-    <p class="mt-6 text-sm text-gray-600">
-      Search is coming. In the meantime the crawler runs in the open as{' '}
-      <code class="rounded bg-gray-100 px-1 py-0.5">WuzzyBot</code>, respects robots.txt, and
-      publishes a content hash for every page it indexes.
+
+    <form id="search-form" class="mt-8 flex gap-2">
+      <input
+        id="query"
+        name="query"
+        required
+        autocomplete="off"
+        placeholder="Ask the index something"
+        class="flex-1 rounded border border-gray-300 px-3 py-2"
+      />
+      <button
+        type="submit"
+        class="cursor-pointer rounded border border-gray-300 px-4 py-2 hover:bg-gray-100"
+      >
+        Search
+      </button>
+    </form>
+
+    <p id="status" class="mt-3 text-sm text-gray-600"></p>
+    <div id="results" class="mt-6"></div>
+
+    <p class="mt-12 border-t border-gray-200 pt-4 text-sm text-gray-600">
+      Every result carries the hash of the exact content that was indexed, produced by a
+      pinned public procedure. Third parties can re-derive it and check the attestation
+      themselves.
     </p>
+
+    <script src="/search.js" defer></script>
   </Layout>
 );

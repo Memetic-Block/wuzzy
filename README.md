@@ -67,6 +67,29 @@ Only hashes and metadata are attested: `url`, `protocol`, `protocolVersion`, `co
 `rawHash`, `fetchedAt`. Never content. A build-time check rejects a schema that would carry
 any.
 
+## Running the whole thing locally
+
+Two stand-ins let the full loop run with no API key, no funds and no mainnet. Both are
+clearly labelled and neither belongs in a real deployment.
+
+```sh
+podman compose up -d                     # pgvector
+bun scripts/demo/stub-embeddings.ts &    # deterministic vectors, NOT a real model
+bun scripts/demo/mock-facilitator.ts &   # approves payments, settles NOTHING
+
+cd apps/backend && bun run migration:run && cd -
+
+export EMBEDDING_BASE_URL=http://127.0.0.1:39500
+bun run wuzzy crawl https://docs.base.org/ --max=60
+bun run wuzzy embed
+
+bun run dev:backend      # open API on :3000
+bun run dev:frontend     # search UI on :8080
+```
+
+To see the metered path, run a second backend with `X402_ENABLED=true` and
+`X402_FACILITATOR_URL=http://127.0.0.1:39600`, then point the demo agent at it.
+
 ## Demo agent
 
 [apps/demo-agent](apps/demo-agent/) is a paying client, and doubles as the integration

@@ -12,7 +12,9 @@
     "scenarios": "bun scripts/scenario-report.ts",
     "typecheck": "bunx tsc --noEmit",
     "wuzzy": "bun apps/backend/src/cli/wuzzy.ts",
-    "demo": "bun apps/demo-agent/src/main.ts"
+    "demo": "bun apps/demo-agent/src/main.ts",
+    "demo:embeddings": "bun scripts/demo/stub-embeddings.ts",
+    "demo:facilitator": "bun scripts/demo/mock-facilitator.ts"
   },
   "devDependencies": {
     "@types/bun": "^1.2.0",
