@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Webhook delivery | Base Docs</title></head>
+<body>
+  <header><nav><a href="/">Base Docs</a></nav></header>
+  <main>
+    <article>
+      <h1>Webhook delivery</h1>
+      <p>Webhooks are delivered at least once. A receiver that is slow to acknowledge, or
+      that returns a non-2xx status, will see the same event again on the next retry, so
+      every handler has to be idempotent with respect to the event identifier.</p>
+      <h2>Retry schedule</h2>
+      <p>Failed deliveries are retried with exponential backoff for up to twenty-four
+      hours. After the final attempt the event is dropped and recorded as undelivered in
+      the dashboard, where it can be replayed by hand if it still matters.</p>
+      <h2>Verifying the signature</h2>
+      <p>Every request carries a signature header computed over the raw body. Verify it
+      before parsing, and compare with a constant-time function:</p>
+      <pre><code class="language-typescript">const expected = hmacSha256(secret, rawBody)
+if (!timingSafeEqual(expected, header)) {
+  return new Response('bad signature', { status: 401 })
+}</code></pre>
+      <p>Parsing before verifying means an attacker chooses what your parser sees, which is
+      a larger attack surface than the comparison you are trying to protect.</p>
+    </article>
+  </main>
+</body>
+</html>

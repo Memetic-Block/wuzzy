@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Node operator checklist | Base Docs</title></head>
+<body>
+  <header><nav><a href="/">Base Docs</a></nav></header>
+  <main>
+    <article>
+      <h1>Node operator checklist</h1>
+      <p>Running a Base node yourself removes the rate limits and third-party dependency of
+      a hosted endpoint, at the cost of operating real infrastructure. Work through this
+      checklist before you point production traffic at your own node.</p>
+      <h2>Hardware</h2>
+      <ul>
+        <li>Storage
+          <ul>
+            <li>NVMe SSD, not spinning disk</li>
+            <li>At least 4 TB free, growing steadily
+              <ul>
+                <li>Snapshot restores need headroom for the archive plus the extracted copy</li>
+                <li>Monitor free space and alert well before the disk fills</li>
+              </ul>
+            </li>
+          </ul>
+        </li>
+        <li>Memory
+          <ul>
+            <li>32 GB minimum for a full node</li>
+            <li>64 GB if you also serve archive queries</li>
+          </ul>
+        </li>
+        <li>Network: a symmetric connection with no monthly transfer cap</li>
+      </ul>
+      <h2>Bring-up order</h2>
+      <ol>
+        <li>Provision the host and attach storage</li>
+        <li>Sync the L1 execution and consensus clients
+          <ol>
+            <li>Start the execution client and wait for it to reach the head</li>
+            <li>Start the consensus client and confirm it is following finality</li>
+          </ol>
+        </li>
+        <li>Start op-node and op-geth against the synced L1</li>
+        <li>Verify the node reports the same block hashes as a public endpoint</li>
+      </ol>
+      <h2>Before serving traffic</h2>
+      <ul>
+        <li>Health checks wired to your load balancer</li>
+        <li>Alerting on
+          <ul>
+            <li>Peer count dropping to zero</li>
+            <li>Block height falling behind the public endpoint</li>
+          </ul>
+        </li>
+      </ul>
+    </article>
+  </main>
+</body>
+</html>

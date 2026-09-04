@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Paymaster overview | Base Docs</title>
+  <link rel="preload" href="/_next/static/chunks/main.js" as="script">
+</head>
+<body>
+  <div id="__next"></div>
+  <noscript>
+    <h1>Paymaster overview</h1>
+    <p>A paymaster sponsors gas on behalf of a user so that an account can transact
+    without holding ETH. The user signs the operation as usual; the paymaster attaches
+    its own signature agreeing to cover the cost, and the bundler submits the pair.</p>
+    <h2>When to sponsor</h2>
+    <p>Sponsorship is most useful for a first-time user who has nothing in their wallet
+    yet. Once the account holds a balance, paying its own gas is simpler and removes a
+    dependency on your infrastructure being available at the moment they transact.</p>
+    <h2>Policies</h2>
+    <p>A policy decides which operations you are willing to pay for. Scope it as tightly
+    as you can: by contract address, by function selector, and by a per-account spend
+    ceiling. An open policy is a funded address that anyone on the internet can drain.</p>
+    <h2>Limits</h2>
+    <p>Sponsored operations still consume the same gas on chain. The paymaster changes
+    who pays, not how much, so a badly optimized contract stays expensive and the cost
+    lands on you rather than on the user who triggered it.</p>
+  </noscript>
+  <script src="/_next/static/chunks/main.js" defer></script>
+</body>
+</html>

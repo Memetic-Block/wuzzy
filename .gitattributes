@@ -1,0 +1,8 @@
+# Conformance vectors are hashed byte for byte. Git must not normalize line
+# endings on checkout or the CRLF fixture stops testing what it exists to test,
+# and every committed .hash becomes unreproducible on a machine configured
+# differently from the one that generated it.
+fixtures/canonicalize-v1/** -text
+
+# Feature files are compared against test names verbatim.
+contracts/*.feature text eol=lf
