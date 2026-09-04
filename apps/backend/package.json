@@ -12,16 +12,22 @@
     "migration:show": "bun run typeorm migration:show"
   },
   "dependencies": {
-    "@nestjs/bullmq": "^11.0.2",
+    "@mozilla/readability": "^0.6.0",
     "@nestjs/common": "^11.0.0",
     "@nestjs/config": "^4.0.0",
     "@nestjs/core": "^11.0.0",
     "@nestjs/platform-express": "^11.0.0",
     "@nestjs/typeorm": "^11.0.0",
-    "bullmq": "^5.34.0",
+    "crawlee": "^3.18.1",
+    "jsdom": "^30.0.1",
     "pg": "^8.13.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.0",
+    "turndown": "^7.2.4",
     "typeorm": "^0.3.20"
+  },
+  "devDependencies": {
+    "@types/jsdom": "^27.0.0",
+    "@types/turndown": "^5.0.5"
   }
 }
