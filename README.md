@@ -1,103 +1,135 @@
-# Repository Template — NestJS + HTMX on Bun
+# Wuzzy
 
-Bare-bones template for the usual Memetic Block stack:
+A search index for AI agents, where every result carries onchain proof of what was crawled
+and when.
 
-- **Backend** — [apps/backend](apps/backend/): NestJS (TypeScript) on the Bun runtime, with BullMQ + Redis and TypeORM + Postgres wired in (both removable, see below).
-- **Frontend** — [apps/frontend](apps/frontend/): HTMX pages written as JSX templates, pre-rendered to static HTML at build time by [build.ts](apps/frontend/build.ts) (no framework, zero runtime deps), styled with Tailwind CSS (compiled at build time from [src/styles.css](apps/frontend/src/styles.css)), served by nginx in production.
-- **CI** — [.forgejo/workflows/ci.yaml](.forgejo/workflows/ci.yaml): Forgejo Actions workflow that tests both apps and publishes two Docker images to the Forgejo container registry.
+Wuzzy crawls documentation sites in the open, canonicalizes each page through a pinned public
+procedure, and attests the resulting hash on Base. `/search` is keyless: payment is the only
+gate, over x402. A paying agent gets results with a provenance block it can verify itself,
+without trusting us.
 
-Use it on Forgejo via *New repository → Template*, or branch/tag this repo for stack variants.
+- **Backend** — [apps/backend](apps/backend/): NestJS (TypeScript) on the Bun runtime, TypeORM
+  against Postgres + pgvector. Pipeline stages are CLI commands, not queue workers.
+- **Frontend** — [apps/frontend](apps/frontend/): HTMX pages written as JSX templates,
+  pre-rendered to static HTML at build time by [build.ts](apps/frontend/build.ts), styled with
+  Tailwind, served by nginx in production.
+- **CI** — [.github/workflows/ci.yaml](.github/workflows/ci.yaml): installs, typechecks, runs
+  the scenario suite against a pgvector service, and publishes both images to GHCR.
+
+## How to verify what Wuzzy claims
+
+[VERIFY.md](VERIFY.md) is the prose specification of the canonicalization procedure, and
+[contracts/canonicalize-v1.feature](contracts/canonicalize-v1.feature) plus
+[fixtures/canonicalize-v1/](fixtures/canonicalize-v1/) are the same thing in executable form.
+They are published protocol artifacts: third parties build independent verifiers against
+them. Only hashes and metadata go onchain, never content.
+
+## Contracts are the definition of done
+
+Gherkin feature files in [contracts/](contracts/) are the spec of record. A work item is done
+when its scenarios pass in CI. Tests bind to a scenario by name through
+`scenario()`, and the coverage spec fails the build if a scenario in an enforced feature has
+no test, or if a test names a scenario that no feature file declares.
+
+```sh
+bun run scenarios   # coverage per feature file
+```
+
+Scenarios tagged `@mainnet @manual` are run by a human against Base mainnet. CI never runs
+them, and a test claiming one of those names fails the build.
 
 ## Local development
 
-Requires [Bun](https://bun.sh) and Docker or Podman (for Redis/Postgres).
+Requires [Bun](https://bun.sh) and Podman or Docker for Postgres.
 
 ```sh
-docker compose up -d        # or: podman compose up -d
+podman compose up -d        # or: docker compose up -d
 cp .env.example .env
 bun install
+
+cd apps/backend && bun run migration:run && cd -
+
 bun run dev:backend         # NestJS with watch on :3000
 bun run dev:frontend        # static build + dev server on :8080, proxies /api → :3000
 ```
 
-Open http://localhost:8080 — the page wires up three HTMX demos against the backend: **Greet** fetches an HTML fragment, the **Database** form adds and lists rows via TypeORM/Postgres, and **Enqueue job** pushes a BullMQ job to Redis (watch the backend logs for the processor output).
+Compose files are engine-agnostic on purpose: dev machines run podman, cloud runs docker.
 
-Run all tests with `bun test`.
+Run the suite with `bun test`, or a single scenario with
+`bun test --test-name-pattern "thin pages are rejected"`. Tests that need Postgres skip
+themselves when it is unreachable locally, and fail outright under `CI`.
 
-## Removing Redis (BullMQ) or Postgres (TypeORM)
+## Database
 
-The integrations are isolated so a new project can strip what it doesn't need:
+The schema lives in
+[apps/backend/src/database/migrations/](apps/backend/src/database/migrations/) as raw SQL,
+because the `vector` extension and the hnsw index cannot be expressed as entities.
+`synchronize` is off in every environment, not just production: TypeORM would drop the
+indexes it cannot model.
 
-| To remove   | Delete                                                | Then |
-| ----------- | ----------------------------------------------------- | ---- |
-| Redis/BullMQ | [apps/backend/src/queue/](apps/backend/src/queue/)   | Drop `QueueModule` from [app.module.ts](apps/backend/src/app.module.ts); remove `@nestjs/bullmq` + `bullmq` from [apps/backend/package.json](apps/backend/package.json); remove the `redis` service from [compose.yaml](compose.yaml) and `REDIS_*` from [.env.example](.env.example) |
-| Postgres/TypeORM | [apps/backend/src/database/](apps/backend/src/database/) | Drop `DatabaseModule` from [app.module.ts](apps/backend/src/app.module.ts); remove `@nestjs/typeorm`, `typeorm` + `pg` from [apps/backend/package.json](apps/backend/package.json); remove the `postgres` service from [compose.yaml](compose.yaml) and `POSTGRES_*` from [.env.example](.env.example) |
+| Table | Holds |
+| ----- | ----- |
+| `documents` | Latest state per URL: canonical content, both hashes, protocol version, embed and attestation bookkeeping |
+| `fetch_log` | Append-only record of every fetch actually performed |
+| `chunks` | Embeddable slices with a `vector(1536)` column and an hnsw index |
 
-Note: the database module auto-creates the schema from entities (`synchronize`) outside production, and the full-stack compose enables it explicitly via `DB_SYNCHRONIZE=true` so the demo runs without migrations. Real projects should turn this off and switch to migrations (see below).
+Content changes clear `embedded_at` and `attestation_uid`, which is what makes the embed and
+attest passes idempotent.
 
-## Database migrations
+Run these from `apps/backend` (Bun auto-loads `.env`, so they target the same database as the
+app):
 
-In stage/live, `synchronize` is **off** (it's only on outside production or when `DB_SYNCHRONIZE=true`), so schema changes are applied through TypeORM migrations instead.
-
-The connection is defined once in [typeorm.config.ts](apps/backend/src/database/typeorm.config.ts) and shared by both the running app and the migration CLI ([data-source.ts](apps/backend/src/database/data-source.ts)), so they can't drift. Migrations live in [apps/backend/src/database/migrations/](apps/backend/src/database/migrations/).
-
-Run these from `apps/backend` (Bun auto-loads `.env`, so they target the same database as the app):
-
-```bash
-# after changing an entity — diffs entities against the DB and writes a migration
+```sh
 bun run migration:generate src/database/migrations/<DescriptiveName>
-
-# apply / roll back / inspect
 bun run migration:run
 bun run migration:revert
 bun run migration:show
 ```
 
-`migration:generate` needs the database reachable (it diffs the live schema), so have the `postgres` service up first.
+`migration:generate` diffs entities against the live schema, so have Postgres up first. It
+cannot see the extension or the hnsw index; those go in by hand.
 
-**Applying migrations on deploy.** Two options:
+**Applying migrations on deploy.** Either run `bun run migration:run` as a one-off job before
+rolling out the new version (preferred for multi-replica), or set `DB_MIGRATIONS_RUN=true` and
+let the app migrate during startup (simple, single-instance). The container image includes
+`typeorm` and the migration files, so both work inside it.
 
-- **Dedicated step (recommended for multi-replica):** run `bun run migration:run` as a one-off job/init container before rolling out the new app version, so exactly one process migrates.
-- **On boot (simple, single-instance):** set `DB_MIGRATIONS_RUN=true` and the app runs pending migrations during startup.
-
-The container image includes `typeorm` and the migration files, so `bun run migration:run` works inside it.
-
-## Docker images
+## Container images
 
 Both Dockerfiles build from the **repository root**:
 
 ```sh
-docker build -f apps/backend/Dockerfile  -t backend .
-docker build -f apps/frontend/Dockerfile -t frontend .
+podman build -f apps/backend/Dockerfile  -t wuzzy-backend .
+podman build -f apps/frontend/Dockerfile -t wuzzy-frontend .
 ```
 
-- Backend: `oven/bun:1`, runs the TypeScript sources directly, listens on `$PORT` (default 3000), healthcheck on `/healthz`.
+- Backend: `oven/bun:1`, runs the TypeScript sources directly, listens on `$PORT` (default
+  3000), healthcheck on `/healthz`.
 - Frontend: build stage pre-renders to `dist/`, final stage is `nginx:1-alpine` on port 80.
 
 ## CI / publishing
 
-The workflow runs on the `debian-bookworm` runner (which must provide a Docker daemon and outbound network access to fetch actions).
+Every push and pull request: `bun install`, `bunx tsc --noEmit`, schema migration against a
+pgvector service, `bun test`, the scenario coverage report, and a frontend smoke build.
 
-- Every push: `bun install`, `bun test`, frontend smoke build.
-- Pushes to the default branch and `v*` tags additionally publish images to the Forgejo registry:
-  - `git.memeticblock.net/<owner>/<repo>-backend`
-  - `git.memeticblock.net/<owner>/<repo>-frontend`
-  - Tagged `latest` + short commit SHA on the default branch, and the semver version on `v*` tags.
+Pushes to the default branch and `v*` tags additionally publish to GHCR:
 
-Required repository secrets:
+- `ghcr.io/<owner>/<repo>-backend`
+- `ghcr.io/<owner>/<repo>-frontend`
 
-| Secret | Value |
-| ------ | ----- |
-| `REGISTRY_TOKEN` | Forgejo access token with `package:write` scope |
+Tagged `latest` plus the full commit SHA on the default branch, and the semver version on
+`v*` tags. Authentication uses the workflow's own `GITHUB_TOKEN`, so no registry secret is
+needed.
 
 ## Layout
 
 ```
-├── package.json                bun workspaces (apps/*), root scripts
-├── tsconfig.base.json          shared strict TS config
-├── compose.yaml                local dev backing services (redis, postgres)
-├── .forgejo/workflows/ci.yaml  test + publish images
+├── contracts/                  Gherkin feature files: the definition of done
+├── fixtures/canonicalize-v1/   Conformance vectors for the pinned hash procedure
+├── VERIFY.md                   Prose spec of that procedure
+├── compose.yml                 Local backing services (pgvector)
+├── .github/workflows/ci.yaml   Test + publish images
 └── apps/
-    ├── backend/                NestJS API (HTMX fragments under /api)
+    ├── backend/                NestJS API, canonicalizer, schema
     └── frontend/               JSX → static HTML, nginx image
 ```
