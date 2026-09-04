@@ -13,7 +13,11 @@ These are not preferences. A change that breaks one of them is wrong even if it 
 - Only hashes + metadata go onchain. Never content.
 - No funded keys in this repo, in sessions, or on this machine. Scenarios tagged
   @mainnet @manual are run by a human, never by CI or agents.
-- Work happens on agents/claude/<n>/<task> branches → PR. Never push main.
+- Work commits straight to master unless Jim asks for a branch. Keep it green: the
+  definition of done is still scenarios passing and CI green, just without the PR. This
+  supersedes the agent-branch-and-PR working agreement in
+  [docs/wuzzy-v2-work-breakdown.md](docs/wuzzy-v2-work-breakdown.md), which is a dated
+  planning artifact and is not edited to match.
 - contracts/*.feature files are the definition of done for every work item.
 
 The canonicalizer lives at [apps/backend/src/canonicalize/v1/](apps/backend/src/canonicalize/v1/) in this
