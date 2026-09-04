@@ -46,6 +46,7 @@ re-run idempotently.
 ```sh
 bun run wuzzy crawl https://docs.base.org   # fetch, canonicalize, write provenance
 bun run wuzzy embed                         # chunk and embed whatever is pending
+bun run wuzzy attest                        # multiAttest anything without a UID
 bun run wuzzy verify <url>                  # re-derive the hash for one indexed URL
 ```
 
@@ -53,9 +54,18 @@ bun run wuzzy verify <url>                  # re-derive the hash for one indexed
 straight into a script.
 
 Each stage is restartable because its work queue is a query rather than external state.
-`embed` picks up documents with a null `embedded_at`, and the crawler nulls that column again
-whenever content changes, so a re-run over an unchanged corpus does nothing and a changed page
-is re-embedded without anyone tracking what already ran.
+`embed` picks up documents with a null `embedded_at` and `attest` picks up those with a null
+`attestation_uid`; the crawler nulls both columns again whenever content changes. So a re-run
+over an unchanged corpus does nothing, a changed page is re-embedded and re-attested, and an
+interrupted run resumes without anyone tracking what already happened.
+
+`attest` needs a funded key, which is why it is the one stage a human runs by hand. It reads
+`ATTESTER_PRIVATE_KEY` from the environment at call time and refuses to start without it. No
+key belongs in this repo, in an agent session, or on a shared machine.
+
+Only hashes and metadata are attested: `url`, `protocol`, `protocolVersion`, `contentHash`,
+`rawHash`, `fetchedAt`. Never content. A build-time check rejects a schema that would carry
+any.
 
 ## Local development
 

@@ -11,12 +11,14 @@ import { DataSource } from 'typeorm';
 import { buildDataSourceOptions } from '../database/typeorm.config';
 import { crawl } from '../crawl/crawler';
 import { embedPending } from '../embed/embed';
+import { attestPending, createEasSubmitter, MissingAttesterKeyError } from '../attest/attestor';
 import { formatVerifyResult, verify } from '../verify/verify';
 
 const USAGE = `wuzzy - provable crawl pipeline
 
   wuzzy crawl <seed-url>...   crawl seeds and write the provenance trail
   wuzzy embed                 embed every document the crawler left pending
+  wuzzy attest                attest every embedded document that has no UID yet
   wuzzy verify <url>          re-derive the hash for one indexed URL
 
 verify exit codes: 0 match, 1 mismatch, 2 not indexed
@@ -48,6 +50,23 @@ async function main(argv: readonly string[]): Promise<number> {
       case 'embed': {
         const summary = await embedPending(dataSource);
         console.log(`embedded ${summary.documents} document(s), ${summary.chunks} chunk(s)`);
+        return 0;
+      }
+      case 'attest': {
+        // Run by a human with a funded key in their own environment. Nothing
+        // here supplies or defaults one.
+        let submitter;
+        try {
+          submitter = createEasSubmitter();
+        } catch (error) {
+          if (error instanceof MissingAttesterKeyError) {
+            console.error(error.message);
+            return 1;
+          }
+          throw error;
+        }
+        const summary = await attestPending(dataSource, { submitter });
+        console.log(`attested ${summary.attested} document(s) in ${summary.batches} batch(es)`);
         return 0;
       }
       case 'verify': {
