@@ -3,7 +3,7 @@
 A search index for AI agents, where every result carries onchain proof of what was crawled
 and when.
 
-Wuzzy crawls documentation sites in the open, canonicalizes each page through a pinned public
+Wuzzy crawls web content, canonicalizes each page through a pinned public
 procedure, and attests the resulting hash on Base. `/search` is keyless: payment is the only
 gate, over x402. A paying agent gets results with a provenance block it can verify itself,
 without trusting us.
