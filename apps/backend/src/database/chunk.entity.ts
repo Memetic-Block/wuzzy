@@ -8,7 +8,10 @@ export class ChunkEntity {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
-  @ManyToOne(() => DocumentEntity, (document) => document.chunks, { onDelete: 'CASCADE' })
+  // One-directional on purpose: an inverse side on DocumentEntity makes the two
+  // entity modules import each other, and emitDecoratorMetadata evaluates the
+  // relation type eagerly, so the cycle throws at class-definition time.
+  @ManyToOne(() => DocumentEntity, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'document_id' })
   document!: DocumentEntity;
 

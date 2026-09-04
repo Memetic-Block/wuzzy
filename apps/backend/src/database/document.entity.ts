@@ -1,5 +1,4 @@
-import { Column, Entity, Index, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
-import { ChunkEntity } from './chunk.entity';
+import { Column, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
 
 /** Latest known state of one indexed URL. Provenance history lives in fetch_log. */
 @Entity('documents')
@@ -57,7 +56,4 @@ export class DocumentEntity {
 
   @Column('timestamptz', { name: 'updated_at', default: () => 'now()' })
   updatedAt!: Date;
-
-  @OneToMany(() => ChunkEntity, (chunk) => chunk.document)
-  chunks!: ChunkEntity[];
 }
