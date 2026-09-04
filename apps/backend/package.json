@@ -1,0 +1,27 @@
+{
+  "name": "backend",
+  "private": true,
+  "scripts": {
+    "dev": "bun --watch src/main.ts",
+    "start": "bun src/main.ts",
+    "test": "bun test",
+    "typeorm": "bun ./node_modules/typeorm/cli.js -d src/database/data-source.ts",
+    "migration:generate": "bun run typeorm migration:generate",
+    "migration:run": "bun run typeorm migration:run",
+    "migration:revert": "bun run typeorm migration:revert",
+    "migration:show": "bun run typeorm migration:show"
+  },
+  "dependencies": {
+    "@nestjs/bullmq": "^11.0.2",
+    "@nestjs/common": "^11.0.0",
+    "@nestjs/config": "^4.0.0",
+    "@nestjs/core": "^11.0.0",
+    "@nestjs/platform-express": "^11.0.0",
+    "@nestjs/typeorm": "^11.0.0",
+    "bullmq": "^5.34.0",
+    "pg": "^8.13.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.0",
+    "typeorm": "^0.3.20"
+  }
+}

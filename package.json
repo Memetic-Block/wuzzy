@@ -1,0 +1,17 @@
+{
+  "name": "repository-template",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:backend": "bun --watch apps/backend/src/main.ts",
+    "dev:frontend": "bun apps/frontend/build.ts --watch --serve",
+    "build:frontend": "bun apps/frontend/build.ts",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.2.0",
+    "typescript": "^5.8.0"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "name": "frontend",
+  "private": true,
+  "scripts": {
+    "build": "bun build.ts",
+    "dev": "bun build.ts --watch --serve",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.3.1",
+    "tailwindcss": "^4.3.1"
+  }
+}

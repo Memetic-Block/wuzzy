@@ -1,0 +1,42 @@
+# Full stack: backing services (from compose.yml) plus the apps in containers.
+#   docker compose -f compose.full.yml up --build
+include:
+  - compose.yml
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+    environment:
+      NODE_ENV: production
+      # Demo stack has no migrations, so let TypeORM create the schema from
+      # entities. Real production deployments should leave this off and migrate.
+      DB_SYNCHRONIZE: "true"
+      PORT: "3000"
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: app
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: .
+      dockerfile: apps/frontend/Dockerfile
+    environment:
+      # nginx proxies /api/ here so the browser's relative requests reach the backend.
+      BACKEND_ORIGIN: http://backend:3000
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend

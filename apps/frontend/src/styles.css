@@ -1,0 +1,5 @@
+@import "tailwindcss";
+
+/* Class detection scans this app's sources; dist/ and node_modules are
+   excluded automatically (gitignored). Add custom CSS below with @layer. */
+@source "../src";
