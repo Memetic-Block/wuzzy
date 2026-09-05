@@ -2,6 +2,7 @@ import type { DataSource } from 'typeorm';
 import { canonicalize } from '../canonicalize/v1';
 import { DocumentEntity } from '../database/document.entity';
 import { createFetcher, type Fetcher } from '../crawl/http';
+import { chainSettings } from '../attest/chain';
 
 /** Exit codes are the contract: callers branch on them, per provenance.feature. */
 export const EXIT_MATCH = 0;
@@ -23,10 +24,16 @@ export interface VerifyResult {
   readonly protocolVersion: number | null;
 }
 
-const EASSCAN_BASE = 'https://base.easscan.org/attestation/view';
-
-export const attestationUrl = (uid: string | null): string | null =>
-  uid === null ? null : `${EASSCAN_BASE}/${uid}`;
+/**
+ * Where a reader goes to check an attestation. Derived from EAS_CHAIN rather
+ * than hardcoded, so a testnet demo links to the explorer that actually holds
+ * its attestations instead of to a mainnet one that does not.
+ */
+export const attestationUrl = (
+  uid: string | null,
+  env: Record<string, string | undefined> = process.env,
+): string | null =>
+  uid === null ? null : `${chainSettings(env).easscan}/attestation/view/${uid}`;
 
 /**
  * Re-executes the pinned canonicalization against the live page and compares

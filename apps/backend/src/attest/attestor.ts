@@ -3,10 +3,10 @@ import { ethers } from 'ethers';
 import { IsNull, Not } from 'typeorm';
 import type { DataSource } from 'typeorm';
 import { DocumentEntity } from '../database/document.entity';
+import { chainSettings, EAS_ADDRESS } from './chain';
 import { encodeAttestation, schemaCarriesNoContent, SCHEMA_DEFINITION } from './schema';
 
 /** EAS on Base mainnet. */
-export const BASE_EAS_ADDRESS = '0x4200000000000000000000000000000000000021';
 
 export interface AttestationRequest {
   readonly documentId: string;
@@ -119,8 +119,11 @@ export function createEasSubmitter(
 ): AttestationSubmitter {
   const schemaUid = options?.schemaUid ?? env.EAS_SCHEMA_UID;
   const privateKey = options?.privateKey ?? env.ATTESTER_PRIVATE_KEY;
-  const rpcUrl = options?.rpcUrl ?? env.BASE_RPC_URL ?? 'https://mainnet.base.org';
-  const easAddress = options?.easAddress ?? env.EAS_ADDRESS ?? BASE_EAS_ADDRESS;
+  // EAS_CHAIN picks the network; BASE_RPC_URL overrides only the endpoint, so
+  // pointing at a private node cannot quietly move which chain is attested to.
+  const chain = chainSettings(env);
+  const rpcUrl = options?.rpcUrl ?? env.BASE_RPC_URL ?? chain.rpcUrl;
+  const easAddress = options?.easAddress ?? env.EAS_ADDRESS ?? EAS_ADDRESS;
 
   if (!schemaUid) throw new MissingAttesterKeyError('EAS_SCHEMA_UID is not set');
   if (!privateKey) {

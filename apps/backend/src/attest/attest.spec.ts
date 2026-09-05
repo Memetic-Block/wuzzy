@@ -12,6 +12,8 @@ import {
   type AttestationSubmitter,
 } from './attestor';
 import { decodeAttestation, encodeAttestation, schemaCarriesNoContent } from './schema';
+import { chainSettings, EAS_ADDRESS, SCHEMA_REGISTRY_ADDRESS, UnknownChainError } from './chain';
+import { attestationUrl } from '../verify/verify';
 
 let dataSource: DataSource | undefined;
 let unreachable: string | undefined;
@@ -175,5 +177,36 @@ describe('batch attestor', () => {
       MissingAttesterKeyError,
     );
     expect(() => createEasSubmitter({}, {})).toThrow(MissingAttesterKeyError);
+  });
+});
+
+describe('attestation chain', () => {
+  const uid = `0x${'e'.repeat(64)}`;
+
+  it('defaults to Base mainnet', () => {
+    expect(chainSettings({}).rpcUrl).toBe('https://mainnet.base.org');
+    expect(attestationUrl(uid, {})).toBe(`https://base.easscan.org/attestation/view/${uid}`);
+  });
+
+  it('moves the explorer and the RPC together', () => {
+    // The failure this prevents is silent: attesting on one network while
+    // linking readers to an explorer for another, where the attestation is
+    // simply absent and the provenance claim looks false.
+    const sepolia = { EAS_CHAIN: 'base-sepolia' };
+    expect(chainSettings(sepolia).rpcUrl).toBe('https://sepolia.base.org');
+    expect(attestationUrl(uid, sepolia)).toBe(
+      `https://base-sepolia.easscan.org/attestation/view/${uid}`,
+    );
+  });
+
+  it('refuses a chain it has no settings for', () => {
+    expect(() => chainSettings({ EAS_CHAIN: 'ethereum' })).toThrow(UnknownChainError);
+  });
+
+  it('uses the same predeploy addresses on both networks', () => {
+    // Verified against both RPCs: EAS and the schema registry are OP Stack
+    // predeploys at identical addresses, so the address is not per-chain.
+    expect(EAS_ADDRESS).toBe('0x4200000000000000000000000000000000000021');
+    expect(SCHEMA_REGISTRY_ADDRESS).toBe('0x4200000000000000000000000000000000000020');
   });
 });
