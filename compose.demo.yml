@@ -1,0 +1,114 @@
+# The whole loop, in containers:
+#
+#   podman compose -f compose.demo.yml up --build -d
+#   podman compose -f compose.demo.yml exec backend bun apps/backend/src/cli/wuzzy.ts crawl https://docs.base.org/ --max=60
+#   podman compose -f compose.demo.yml exec backend bun apps/backend/src/cli/wuzzy.ts embed
+#   open http://localhost:8080
+#
+# Two services here are stand-ins so the loop runs with no API key, no funds and
+# no mainnet. Both say so loudly in their own source, and neither belongs in a
+# real deployment. Everything else is the real thing.
+# Postgres is declared here rather than included from compose.yml: `include`
+# merges list fields by appending, so an overridden `ports` would try to bind
+# 5432 as well as 5433 and collide with whatever already holds it.
+services:
+  postgres:
+    image: docker.io/pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: app
+    # 5433 so this can run alongside another project already on 5432.
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d app"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # NOT an embedding model: deterministic hashed bag of words. Enough to show
+  # retrieval wiring end to end, useless for real relevance.
+  embeddings:
+    image: docker.io/oven/bun:1-alpine
+    working_dir: /demo
+    volumes:
+      - ./scripts/demo:/demo:z,ro
+    command: ["bun", "/demo/stub-embeddings.ts"]
+    expose:
+      - "39500"
+
+  # Approves every well-formed payment and settles NOTHING. Real settlement is
+  # the @mainnet @manual scenario in contracts/payment.feature.
+  facilitator:
+    image: docker.io/oven/bun:1-alpine
+    working_dir: /demo
+    volumes:
+      - ./scripts/demo:/demo:z,ro
+    command: ["bun", "/demo/mock-facilitator.ts"]
+    expose:
+      - "39600"
+
+  # The open API the browser talks to. Also owns the schema migration.
+  backend:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+    environment:
+      NODE_ENV: production
+      DB_MIGRATIONS_RUN: "true"
+      PORT: "3000"
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: app
+      EMBEDDING_BASE_URL: http://embeddings:39500
+      EMBEDDING_MODEL: stub-embeddings
+      EMBEDDING_DIMENSIONS: "1536"
+      # A browser cannot sign an x402 payment, so the UI talks to an open
+      # instance. The metered path is `backend-metered` below.
+      X402_ENABLED: "false"
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # The same image with the meter on, for the demo agent to pay.
+  backend-metered:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: app
+      EMBEDDING_BASE_URL: http://embeddings:39500
+      EMBEDDING_MODEL: stub-embeddings
+      EMBEDDING_DIMENSIONS: "1536"
+      X402_ENABLED: "true"
+      X402_NETWORK: base-sepolia
+      X402_PRICE: $$0.01
+      X402_PAY_TO: "0x2222222222222222222222222222222222222222"
+      X402_FACILITATOR_URL: http://facilitator:39600
+    ports:
+      - "3001:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: .
+      dockerfile: apps/frontend/Dockerfile
+    environment:
+      BACKEND_ORIGIN: http://backend:3000
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
