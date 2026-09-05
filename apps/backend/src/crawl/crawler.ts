@@ -206,8 +206,9 @@ async function discoverSeeds(
   for (const seed of seeds) {
     candidates.add(seed);
     if (!discover) continue;
-    const robots = await loadRobots(new URL(seed).origin, fetcher);
-    for (const url of await collectSitemapUrls(robots.sitemaps, fetcher)) {
+    const { origin } = new URL(seed);
+    const robots = await loadRobots(origin, fetcher);
+    for (const url of await collectSitemapUrls(sitemapsFor(origin, robots), fetcher)) {
       candidates.add(url);
     }
   }
@@ -217,6 +218,26 @@ async function discoverSeeds(
     if (await inScope(candidate)) allowed.push(candidate);
   }
   return interleaveByHost(allowed);
+}
+
+/**
+ * The sitemaps to read for a host: whatever robots.txt declares, or the
+ * conventional location when it declares none.
+ *
+ * Declaring a sitemap in robots.txt is a convention, not a requirement, and
+ * plenty of documentation sites publish one at /sitemap.xml without mentioning
+ * it. Reading only declared sitemaps meant a site whose pages are rendered
+ * client-side, and so has no anchors to follow either, indexed as its landing
+ * page alone: docs.attest.org advertised 106 URLs and we had one of them.
+ *
+ * The probe is a single request to a conventional path, made with the honest
+ * user-agent and only after robots.txt has been read and allows it. A site
+ * that has no such file answers 404 and the crawl proceeds as before.
+ */
+export function sitemapsFor(origin: string, robots: RobotsPolicy): string[] {
+  if (robots.sitemaps.length > 0) return [...robots.sitemaps];
+  const conventional = new URL('/sitemap.xml', origin).toString();
+  return robots.isAllowed(conventional) ? [conventional] : [];
 }
 
 /**

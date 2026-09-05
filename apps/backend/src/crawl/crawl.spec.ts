@@ -7,7 +7,7 @@ import { FetchLogEntity } from '../database/fetch-log.entity';
 import { buildDataSourceOptions } from '../database/typeorm.config';
 import { truncateWuzzyTables } from '../testing/database';
 import { scenario } from '../testing/scenario';
-import { crawl, interleaveByHost } from './crawler';
+import { crawl, interleaveByHost, sitemapsFor } from './crawler';
 import { PROSE, page, startMockSite, type MockSite } from './mock-site';
 
 // Crawlee narrates every run at INFO, which buries the test output.
@@ -296,5 +296,51 @@ describe('crawl provenance lifecycle', () => {
     expect(log[0]!.contentHash).toBeNull();
     // The raw hash still commits to what was received, even though nothing was indexed.
     expect(log[0]!.rawHash).toMatch(/^[0-9a-f]{64}$/);
+  });
+});
+
+describe('sitemap discovery', () => {
+  it('prefers what robots.txt declares', () => {
+    const declared = ['https://x.test/sitemap-pages.xml', 'https://x.test/sitemap-blog.xml'];
+    expect(sitemapsFor('https://x.test', { isAllowed: () => true, sitemaps: declared })).toEqual(
+      declared,
+    );
+  });
+
+  it('falls back to the conventional path when robots declares none', () => {
+    // Declaring a sitemap is a convention, not a requirement. A site that
+    // publishes one without mentioning it, and renders its pages client-side
+    // so there are no anchors either, would otherwise index as one page.
+    expect(sitemapsFor('https://x.test', { isAllowed: () => true, sitemaps: [] })).toEqual([
+      'https://x.test/sitemap.xml',
+    ]);
+  });
+
+  it('does not probe a path robots.txt disallows', () => {
+    expect(sitemapsFor('https://x.test', { isAllowed: () => false, sitemaps: [] })).toEqual([]);
+  });
+
+  it('finds pages on a site whose sitemap is undeclared', async () => {
+    const source = db();
+    if (!source) return;
+
+    const mock = await site({
+      // robots.txt exists and allows everything, but names no sitemap.
+      '/robots.txt': ROBOTS_ALLOW_ALL,
+      '/': page('Landing', PROSE),
+      '/guide': page('Guide', PROSE),
+      '/reference': page('Reference', PROSE),
+    });
+    // The sitemap is served, just never advertised.
+    mock.setPage(
+      '/sitemap.xml',
+      `<?xml version="1.0"?><urlset><url><loc>${mock.origin}/guide</loc></url>` +
+        `<url><loc>${mock.origin}/reference</loc></url></urlset>`,
+    );
+
+    await crawl(source, { seeds: [`${mock.origin}/`] });
+
+    const urls = (await source.getRepository(DocumentEntity).find()).map((d) => d.url).sort();
+    expect(urls).toEqual([`${mock.origin}/`, `${mock.origin}/guide`, `${mock.origin}/reference`]);
   });
 });
