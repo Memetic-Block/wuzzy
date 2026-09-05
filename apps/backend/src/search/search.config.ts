@@ -10,6 +10,11 @@ export interface SearchConfig {
   readonly b: number;
   /** Candidates each arm contributes before fusion. */
   readonly candidates: number;
+  /**
+   * Scoped chunk count at or below which the vector arm scans exhaustively
+   * instead of using the approximate index. See SearchService.vectorSearch.
+   */
+  readonly exactScanChunks: number;
 }
 
 export const SEARCH_CONFIG = Symbol('SEARCH_CONFIG');
@@ -28,5 +33,8 @@ export function buildSearchConfig(
     // Deeper than topK so fusion has something to reorder: a document ranked
     // 30th lexically and 3rd by vector should be able to surface.
     candidates: Number(env.SEARCH_CANDIDATES ?? 50),
+    // Well above the index page cap and below the size at which a sequential
+    // scan of embeddings stops being cheap.
+    exactScanChunks: Number(env.SEARCH_EXACT_SCAN_CHUNKS ?? 20000),
   };
 }

@@ -11,7 +11,9 @@ import { buildDataSourceOptions } from '../database/typeorm.config';
 import { toVectorLiteral, type Embedder } from '../embed/embedder';
 import { SearchController } from '../search/search.controller';
 import { SearchService } from '../search/search.service';
-import { truncateWuzzyTables } from '../testing/database';
+import { IndexesService } from '../indexes/indexes.service';
+import { INDEXES_CONFIG, buildIndexesConfig } from '../indexes/index.config';
+import { globalIndexId, joinIndex, truncateWuzzyTables } from '../testing/database';
 import { scenario } from '../testing/scenario';
 import { PAYMENT_CONFIG, type PaymentConfig } from './payment.config';
 import { PaymentService } from './payment.service';
@@ -87,6 +89,8 @@ async function boot(source: DataSource, overrides: Partial<PaymentConfig>) {
       { provide: PAYMENT_CONFIG, useValue: config },
       PaymentService,
       { provide: SearchService, useValue: new SearchService(source, stubEmbedder()) },
+      { provide: IndexesService, useValue: new IndexesService(source, buildIndexesConfig({})) },
+      { provide: INDEXES_CONFIG, useValue: buildIndexesConfig({}) },
     ],
   }).compile();
 
@@ -115,6 +119,10 @@ async function seedCorpus(source: DataSource, attestationUid: string | null) {
     attestationUid,
     attestedAt: attestationUid ? new Date('2026-02-01T02:00:00Z') : null,
   });
+
+  // Search is always scoped, so a document nobody joined to an index is a
+  // document nothing can find.
+  await joinIndex(source, await globalIndexId(source), document.id);
 
   const [vector] = await stubEmbedder().embed([text]);
   await source.getRepository(ChunkEntity).insert({

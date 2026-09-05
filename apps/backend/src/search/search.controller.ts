@@ -1,6 +1,7 @@
 import { Body, Controller, HttpStatus, Post, Req, Res } from '@nestjs/common';
 import type { Request, Response } from 'express';
-import { PaymentService } from '../payment/payment.service';
+import { IndexesService, UnknownIndexError } from '../indexes/indexes.service';
+import { PaymentService, payerOf } from '../payment/payment.service';
 import { EmptyQueryError, SearchService } from './search.service';
 
 interface SearchBody {
@@ -8,6 +9,8 @@ interface SearchBody {
   readonly topK?: unknown;
   /** Optional override, mostly for tuning: hybrid, vector or lexical. */
   readonly mode?: unknown;
+  /** Index id or slug. Absent means the global index. */
+  readonly index?: unknown;
 }
 
 const MAX_TOP_K = 50;
@@ -17,6 +20,7 @@ export class SearchController {
   constructor(
     private readonly search: SearchService,
     private readonly payment: PaymentService,
+    private readonly indexes: IndexesService,
   ) {}
 
   /**
@@ -30,11 +34,30 @@ export class SearchController {
     @Req() request: Request,
     @Res() response: Response,
   ): Promise<void> {
+    const reference = typeof body?.index === 'string' ? body.index : null;
+    let index;
+    try {
+      index = await this.indexes.resolve(reference);
+    } catch (error) {
+      if (!(error instanceof UnknownIndexError)) throw error;
+      response.status(HttpStatus.NOT_FOUND).json({ error: error.message });
+      return;
+    }
+
     const resourceUrl = `${request.protocol}://${request.get('host') ?? 'localhost'}${request.path}`;
     const outcome = await this.payment.authorize(request.header('X-PAYMENT'), resourceUrl);
 
     if (outcome.kind === 'rejected') {
       response.status(outcome.rejection.status).json(outcome.rejection.body);
+      return;
+    }
+
+    // The allowlist check sits between verification and settlement. A verified
+    // payment is what proves control of the payer wallet, so it has to come
+    // first; settling before checking would charge a wallet for a 403.
+    const payer = outcome.kind === 'accepted' ? payerOf(outcome.accepted) : null;
+    if (this.payment.enabled && !(await this.indexes.canRead(index, payer))) {
+      response.status(HttpStatus.FORBIDDEN).json({ error: 'not permitted to read this index' });
       return;
     }
 
@@ -46,7 +69,7 @@ export class SearchController {
 
     let results;
     try {
-      results = await this.search.search(query, topK, mode);
+      results = await this.search.search(query, { topK, mode, scope: { indexId: index.id } });
     } catch (error) {
       if (error instanceof EmptyQueryError) {
         response.status(HttpStatus.BAD_REQUEST).json({ error: 'query must not be blank' });
@@ -60,7 +83,7 @@ export class SearchController {
       if (header) response.setHeader('X-PAYMENT-RESPONSE', header);
     }
 
-    response.status(HttpStatus.OK).json({ query, results });
+    response.status(HttpStatus.OK).json({ query, index: index.slug, results });
   }
 }
 

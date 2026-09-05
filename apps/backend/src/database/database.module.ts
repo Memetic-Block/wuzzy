@@ -3,6 +3,10 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ChunkEntity } from './chunk.entity';
 import { DocumentEntity } from './document.entity';
 import { FetchLogEntity } from './fetch-log.entity';
+import { IndexDocumentEntity } from './index-document.entity';
+import { IndexReaderEntity } from './index-reader.entity';
+import { IndexUrlEntity } from './index-url.entity';
+import { IndexEntity } from './index.entity';
 import { buildDataSourceOptions } from './typeorm.config';
 
 @Module({
@@ -17,7 +21,15 @@ import { buildDataSourceOptions } from './typeorm.config';
         migrationsRun: process.env.DB_MIGRATIONS_RUN === 'true',
       }),
     }),
-    TypeOrmModule.forFeature([DocumentEntity, FetchLogEntity, ChunkEntity]),
+    TypeOrmModule.forFeature([
+      DocumentEntity,
+      FetchLogEntity,
+      ChunkEntity,
+      IndexEntity,
+      IndexDocumentEntity,
+      IndexReaderEntity,
+      IndexUrlEntity,
+    ]),
   ],
   exports: [TypeOrmModule],
 })

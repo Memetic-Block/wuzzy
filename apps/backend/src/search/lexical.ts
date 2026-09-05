@@ -33,6 +33,16 @@ export interface Bm25Params {
   readonly b?: number;
 }
 
+/**
+ * The index being searched. Every arm is scoped, including the global one:
+ * BM25's IDF and average length are properties of the collection, so a scoped
+ * search that borrowed the whole store's statistics would rank by how rare a
+ * term is somewhere the caller cannot see.
+ */
+export interface Scope {
+  readonly indexId: string;
+}
+
 export const DEFAULT_K1 = 1.2;
 export const DEFAULT_B = 0.75;
 
@@ -46,6 +56,7 @@ export async function lexicalSearch(
   dataSource: DataSource,
   query: string,
   limit: number,
+  scope: Scope,
   params: Bm25Params = {},
 ): Promise<LexicalHit[]> {
   const k1 = params.k1 ?? DEFAULT_K1;
@@ -63,18 +74,25 @@ export async function lexicalSearch(
       FROM terms
     ),
     corpus AS (
-      SELECT count(*)::float8 AS n, coalesce(avg(term_count), 0)::float8 AS avgdl
-      FROM chunks
+      SELECT count(*)::float8 AS n, coalesce(avg(c.term_count), 0)::float8 AS avgdl
+      FROM chunks c
+      JOIN index_documents m ON m.document_id = c.document_id AND m.index_id = $5::uuid
     ),
     document_frequency AS (
+      -- The membership join stays inside each scan rather than in a shared CTE:
+      -- materialising the scoped chunk set once would read well but would cost
+      -- the GIN index on every document-frequency probe.
       SELECT t.lexeme,
              (SELECT count(*) FROM chunks c
+                JOIN index_documents m ON m.document_id = c.document_id AND m.index_id = $5::uuid
                WHERE c.tsv @@ to_tsquery('simple', quote_literal(t.lexeme)))::float8 AS df
       FROM terms t
     ),
     candidates AS (
       SELECT c.id, c.document_id, c.tsv, c.term_count
-      FROM chunks c, query q
+      FROM chunks c
+      JOIN index_documents m ON m.document_id = c.document_id AND m.index_id = $5::uuid
+      CROSS JOIN query q
       WHERE q.tsq IS NOT NULL AND c.tsv @@ q.tsq
     ),
     scored AS (
@@ -100,7 +118,7 @@ export async function lexicalSearch(
     ORDER BY score DESC
     LIMIT $4::int
     `,
-    [query, k1, b, limit],
+    [query, k1, b, limit, scope.indexId],
   );
 
   return rows.map((row: { id: string; document_id: string; score: string }) => ({

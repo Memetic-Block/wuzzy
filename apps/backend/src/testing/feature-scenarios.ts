@@ -12,6 +12,7 @@ const SPEC_ROOTS = [join(REPO_ROOT, 'apps/backend/src'), join(REPO_ROOT, 'apps/f
  */
 export const ENFORCED_FEATURES = new Set([
   'canonicalize-v1.feature',
+  'indexes.feature',
   'payment.feature',
   'provenance.feature',
 ]);

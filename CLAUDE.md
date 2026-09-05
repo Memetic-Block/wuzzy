@@ -44,6 +44,7 @@ bun run dev:backend               # NestJS with watch on :3000
 bun run dev:frontend              # static build + dev server on :8080, proxies /api → :3000
 
 bun run wuzzy crawl <seed-url>... # pipeline stages are CLI commands
+bun run wuzzy crawl --index=<id>  # drain one index's paid-for URL queue
 bun run wuzzy embed
 bun run wuzzy verify <url>        # exits 0 match, 1 mismatch, 2 not indexed
 bun run demo search "<query>"     # the paying client; no wallet needed in dev mode
@@ -169,10 +170,31 @@ nginx and dev server both refuse `/api/admin/`. Both apps render through
 [packages/static-site](packages/static-site/), so the shared builder cannot drift between
 them.
 
-**The index is global and has no tenancy.** `documents` has no owner, workspace or index id:
-there is one corpus. [admin/](apps/backend/src/admin/) groups by host because that is the
-only natural grouping the schema supports. Anything phrased as "indexes people created"
-needs a schema change first, not an admin query.
+**Indexes are one primitive, configured differently.** There is one shared document store
+and `indexes` is a membership view over it ([indexes/](apps/backend/src/indexes/)), so a URL
+two indexes both want is crawled, canonicalized and attested exactly once. "Global" is not a
+special case: it is a row owned by the operator wallet with `visibility=listed` and
+`read_policy=open`, and an unscoped `/search` is a scoped search that resolved to it. Search
+is therefore *always* scoped, and a spec that seeds documents directly has to join them to an
+index or nothing will find them.
+
+Three things follow, and breaking any of them is a bug:
+
+- **Attestations never learn that indexes exist.** Provenance is a property of the fetch.
+  `schemaCarriesNoIndex` in [attest/schema.ts](apps/backend/src/attest/schema.ts) guards it the
+  same way `schemaCarriesNoContent` guards the content invariant.
+- **A commissioned crawl does not discover.** `crawl --index` fetches exactly the URLs that
+  were paid for: link-following would fetch pages nobody bought and overrun the page cap.
+  Robots is still read and still obeyed, because paying us cannot confer a right to fetch.
+- **Access control rides x402 and runs before settlement.** A verified payment proves control
+  of the payer wallet, so allowlists need no second auth mechanism; the check sits between
+  `authorize` and `settle` so a rejected wallet is never charged. With the meter disabled
+  there is no payer and no enforcement, which is one more reason `X402_ENABLED=false` is a
+  development-only switch.
+
+An index's status is derived from its crawl queue rather than stored, so it cannot disagree
+with the work outstanding. [admin/](apps/backend/src/admin/) still groups by host, which is a
+view over the global index rather than the only grouping available.
 
 ## Running the demo
 

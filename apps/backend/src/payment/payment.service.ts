@@ -28,6 +28,29 @@ export interface PaymentAcceptance {
   readonly requirements: PaymentRequirements;
 }
 
+/**
+ * What a request is being charged, when it is not the flat per-query price.
+ * The quote has to be a pure function of the request body: the client sees it
+ * in the 402, signs for exactly that amount, and retries. Anything derived
+ * from state that can move in between (a sitemap, a page count discovered by
+ * crawling) would quote one price and match against another.
+ */
+export interface PriceQuote {
+  readonly price: string;
+  readonly description?: string;
+}
+
+/**
+ * The paying wallet, taken from the signed authorization rather than from the
+ * facilitator's reply: this is the field the payer actually put a signature
+ * over, so it is the one that can carry an authorization decision.
+ */
+export function payerOf(accepted: PaymentAcceptance): string | null {
+  const payload = accepted.payload.payload as { authorization?: { from?: unknown } } | undefined;
+  const from = payload?.authorization?.from;
+  return typeof from === 'string' ? from.toLowerCase() : null;
+}
+
 export type PaymentOutcome =
   | { readonly kind: 'open' }
   | { readonly kind: 'accepted'; readonly accepted: PaymentAcceptance }
@@ -55,8 +78,8 @@ export class PaymentService {
     return this.config.enabled;
   }
 
-  buildRequirements(resourceUrl: string): PaymentRequirements[] {
-    const atomic = processPriceToAtomicAmount(this.config.price, this.config.network);
+  buildRequirements(resourceUrl: string, quote?: PriceQuote): PaymentRequirements[] {
+    const atomic = processPriceToAtomicAmount(quote?.price ?? this.config.price, this.config.network);
     if ('error' in atomic) throw new Error(atomic.error);
     const { maxAmountRequired, asset } = atomic;
 
@@ -72,7 +95,7 @@ export class PaymentService {
         network: this.config.network,
         maxAmountRequired,
         resource: resourceUrl as `${string}://${string}`,
-        description: this.config.description,
+        description: quote?.description ?? this.config.description,
         mimeType: 'application/json',
         payTo: getAddress(this.config.payTo),
         maxTimeoutSeconds: 60,
@@ -84,10 +107,14 @@ export class PaymentService {
   }
 
   /** Decides whether a request may proceed, without touching the handler. */
-  async authorize(header: string | undefined, resourceUrl: string): Promise<PaymentOutcome> {
+  async authorize(
+    header: string | undefined,
+    resourceUrl: string,
+    quote?: PriceQuote,
+  ): Promise<PaymentOutcome> {
     if (!this.config.enabled) return { kind: 'open' };
 
-    const requirements = this.buildRequirements(resourceUrl);
+    const requirements = this.buildRequirements(resourceUrl, quote);
     const reject = (error: string, payer?: string): PaymentOutcome => ({
       kind: 'rejected',
       rejection: {

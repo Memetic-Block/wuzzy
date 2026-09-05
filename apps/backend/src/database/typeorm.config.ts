@@ -2,6 +2,10 @@ import type { DataSourceOptions } from 'typeorm';
 import { ChunkEntity } from './chunk.entity';
 import { DocumentEntity } from './document.entity';
 import { FetchLogEntity } from './fetch-log.entity';
+import { IndexDocumentEntity } from './index-document.entity';
+import { IndexReaderEntity } from './index-reader.entity';
+import { IndexUrlEntity } from './index-url.entity';
+import { IndexEntity } from './index.entity';
 
 // Single source of truth for the Postgres connection. Shared by the NestJS
 // TypeOrmModule (database.module.ts) and the standalone DataSource that the
@@ -17,7 +21,15 @@ export function buildDataSourceOptions(env = process.env): DataSourceOptions {
     username: env.POSTGRES_USER ?? 'app',
     password: env.POSTGRES_PASSWORD ?? 'app',
     database: env.POSTGRES_DB ?? 'app',
-    entities: [DocumentEntity, FetchLogEntity, ChunkEntity],
+    entities: [
+      DocumentEntity,
+      FetchLogEntity,
+      ChunkEntity,
+      IndexEntity,
+      IndexDocumentEntity,
+      IndexReaderEntity,
+      IndexUrlEntity,
+    ],
     migrations: [__dirname + '/migrations/*.{ts,js}'],
     // Never on, in any environment. The schema carries a `vector` extension and
     // an hnsw index that entities cannot express, so migrations own it outright

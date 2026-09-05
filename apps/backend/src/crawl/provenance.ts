@@ -12,6 +12,8 @@ export interface FetchRecord {
   readonly fetchedAt: Date;
   readonly canonical: CanonicalizeResult;
   readonly title?: string | null;
+  /** Index the resulting document joins. Membership only; provenance is unaffected. */
+  readonly indexId?: string | null;
 }
 
 export interface RecordedFetch {
@@ -28,6 +30,11 @@ export interface RecordedFetch {
  * and a content change clears the downstream bookkeeping so the embed and
  * attest passes pick the document up again. Both writes land in one transaction
  * so a crash cannot leave a document without the trail that explains it.
+ *
+ * Index membership joins that transaction rather than following it, so a
+ * document can never exist without the index that paid for it. Nothing about
+ * the hashes or the fetch_log row changes with membership: provenance is a
+ * property of the fetch, and a URL two indexes both want is attested once.
  */
 export async function recordFetch(
   dataSource: DataSource,
@@ -84,6 +91,14 @@ export async function recordFetch(
       contentChanged: changed,
       fetchedAt: record.fetchedAt,
     });
+
+    if (record.indexId) {
+      await manager.query(
+        `INSERT INTO index_documents (index_id, document_id) VALUES ($1, $2)
+         ON CONFLICT DO NOTHING`,
+        [record.indexId, saved.id],
+      );
+    }
 
     if (!existing) return { outcome: 'created', documentId: saved.id };
     return { outcome: changed ? 'changed' : 'unchanged', documentId: saved.id };

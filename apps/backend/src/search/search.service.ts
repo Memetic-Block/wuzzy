@@ -5,7 +5,7 @@ import { PROTOCOL, PROTOCOL_VERSION } from '../canonicalize/v1';
 import { createEmbedder, toVectorLiteral, type Embedder } from '../embed/embedder';
 import { attestationUrl } from '../verify/verify';
 import { reciprocalRankFusion } from './fusion';
-import { lexicalSearch, type LexicalHit } from './lexical';
+import { lexicalSearch, type LexicalHit, type Scope } from './lexical';
 import { SEARCH_CONFIG, buildSearchConfig, type SearchConfig, type SearchMode } from './search.config';
 
 export interface SearchProvenance {
@@ -28,6 +28,13 @@ export interface SearchResult {
 }
 
 export class EmptyQueryError extends Error {}
+
+export interface SearchOptions {
+  readonly topK?: number;
+  readonly mode?: SearchMode;
+  /** The index to search. Callers resolve an absent one to the global index. */
+  readonly scope: Scope;
+}
 
 export const EMBEDDER = Symbol('EMBEDDER');
 
@@ -73,16 +80,20 @@ export class SearchService {
    * Running both and fusing by rank costs one extra index and keeps each one's
    * strength.
    */
-  async search(query: string, topK = 10, mode?: SearchMode): Promise<SearchResult[]> {
+  async search(query: string, options: SearchOptions): Promise<SearchResult[]> {
     const trimmed = query.trim();
     if (trimmed === '') throw new EmptyQueryError('query must not be blank');
 
-    const effectiveMode = mode ?? this.config.mode;
+    const { scope } = options;
+    const topK = options.topK ?? 10;
+    const effectiveMode = options.mode ?? this.config.mode;
     const depth = Math.max(this.config.candidates, topK);
 
     const [lexical, vector] = await Promise.all([
-      effectiveMode === 'vector' ? [] : lexicalSearch(this.dataSource, trimmed, depth, this.config),
-      effectiveMode === 'lexical' ? [] : this.vectorSearch(trimmed, depth),
+      effectiveMode === 'vector'
+        ? []
+        : lexicalSearch(this.dataSource, trimmed, depth, scope, this.config),
+      effectiveMode === 'lexical' ? [] : this.vectorSearch(trimmed, depth, scope),
     ]);
 
     // Fuse on chunk, not document: the same page can match one query lexically
@@ -132,18 +143,51 @@ export class SearchService {
     return results;
   }
 
-  private async vectorSearch(query: string, limit: number): Promise<LexicalHit[]> {
+  /**
+   * The vector arm, scoped to one index's members.
+   *
+   * Scoping is what makes the hnsw index unsafe to lean on unconditionally. An
+   * approximate scan visits a fixed number of candidates across the whole
+   * table and discards non-members only afterwards, so an index holding a
+   * small share of the store can come back with almost nothing while the
+   * chunks it wanted sit just outside the visited set. Below
+   * `exactScanChunks` the scoped set is small enough that an exhaustive scan
+   * is both cheap and exactly right, and the page cap keeps commissioned
+   * indexes in that regime; above it the approximate path is the only
+   * affordable one, and a scope that large has the recall an unscoped search
+   * would have had anyway.
+   */
+  private async vectorSearch(query: string, limit: number, scope: Scope): Promise<LexicalHit[]> {
     const [vector] = await this.embedder.embed([query]);
     if (!vector) return [];
 
-    const rows: VectorHit[] = await this.dataSource.query(
-      `SELECT c.id AS chunk_id, c.document_id, 1 - (c.embedding <=> $1::vector) AS score
+    const [{ chunks }] = (await this.dataSource.query(
+      `SELECT count(*)::int AS chunks
        FROM chunks c
+       JOIN index_documents m ON m.document_id = c.document_id AND m.index_id = $1::uuid
+       WHERE c.embedding IS NOT NULL`,
+      [scope.indexId],
+    )) as [{ chunks: number }];
+
+    const sql = `SELECT c.id AS chunk_id, c.document_id, 1 - (c.embedding <=> $1::vector) AS score
+       FROM chunks c
+       JOIN index_documents m ON m.document_id = c.document_id AND m.index_id = $3::uuid
        WHERE c.embedding IS NOT NULL
        ORDER BY c.embedding <=> $1::vector
-       LIMIT $2`,
-      [toVectorLiteral(vector), limit],
-    );
+       LIMIT $2`;
+    const params = [toVectorLiteral(vector), limit, scope.indexId];
+
+    const rows: VectorHit[] =
+      chunks <= this.config.exactScanChunks
+        ? await this.dataSource.transaction(async (manager) => {
+            // Refusing the hnsw index is the point: an ordered index scan is
+            // the approximate path, and a sort over the scoped rows is the
+            // exact one. SET LOCAL keeps it to this statement.
+            await manager.query(`SET LOCAL enable_indexscan = off`);
+            return manager.query(sql, params);
+          })
+        : await this.dataSource.query(sql, params);
+
     return rows.map((row) => ({
       chunkId: row.chunk_id,
       documentId: row.document_id,

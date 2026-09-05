@@ -13,6 +13,8 @@ import { crawl } from '../crawl/crawler';
 import { readSeeds } from '../crawl/seeds';
 import { embedPending } from '../embed/embed';
 import { attestPending, createEasSubmitter, MissingAttesterKeyError } from '../attest/attestor';
+import { crawlIndexQueue } from '../indexes/index-crawl';
+import { IndexesService } from '../indexes/indexes.service';
 import { formatVerifyResult, verify } from '../verify/verify';
 
 const USAGE = `wuzzy - provable crawl pipeline
@@ -21,6 +23,8 @@ const USAGE = `wuzzy - provable crawl pipeline
                               with no URLs, reads seeds.json
                               --max=<n> caps pages fetched in total
                               --per-host=<n> caps pages fetched from each host
+                              --index=<id|slug> crawl that index's queue instead,
+                              fetching only the URLs it paid for
   wuzzy embed                 embed every document the crawler left pending
   wuzzy attest                attest every embedded document that has no UID yet
   wuzzy verify <url>          re-derive the hash for one indexed URL
@@ -40,12 +44,13 @@ async function main(argv: readonly string[]): Promise<number> {
   try {
     switch (command) {
       case 'crawl': {
+        const indexFlag = args.find((arg) => arg.startsWith('--index='));
         const maxFlag = args.find((arg) => arg.startsWith('--max='));
         const given = args.filter((arg) => !arg.startsWith('--'));
         // No URLs means the curated list, so a real crawl is reproducible
         // without anyone having to remember what it was built from.
-        const seeds = given.length > 0 ? given : await readSeeds();
-        if (given.length === 0) {
+        const seeds = given.length > 0 ? given : indexFlag ? [] : await readSeeds();
+        if (given.length === 0 && !indexFlag) {
           console.log(`seeds.json: ${seeds.length} host(s)`);
         }
         const maxRequests = maxFlag ? Number(maxFlag.slice('--max='.length)) : undefined;
@@ -59,7 +64,26 @@ async function main(argv: readonly string[]): Promise<number> {
           console.error('--per-host must be a positive number');
           return 1;
         }
-        const summary = await crawl(dataSource, { seeds, maxRequests, maxPerHost });
+        // Everything a crawl indexes belongs to an index. Without --index that
+        // is the global one, which is what an unscoped /search reads.
+        const indexes = new IndexesService(dataSource);
+        const target = await indexes.resolve(indexFlag?.slice('--index='.length));
+
+        if (indexFlag) {
+          const result = await crawlIndexQueue(dataSource, target.id);
+          console.log(
+            `queued ${result.requested}  indexed ${result.indexed}  ` +
+              `skipped ${result.skipped}  failed ${result.failed}`,
+          );
+          return result.requested > 0 && result.indexed === 0 ? 1 : 0;
+        }
+
+        const summary = await crawl(dataSource, {
+          seeds,
+          maxRequests,
+          maxPerHost,
+          indexId: target.id,
+        });
         console.log(
           `created ${summary.created}  changed ${summary.changed}  ` +
             `unchanged ${summary.unchanged}  skipped ${summary.skipped}  failed ${summary.failed}`,

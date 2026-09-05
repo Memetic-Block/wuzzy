@@ -3,7 +3,7 @@ import 'reflect-metadata';
 import { DataSource } from 'typeorm';
 import { ChunkEntity } from '../database/chunk.entity';
 import { DocumentEntity } from '../database/document.entity';
-import { connectForTests, truncateWuzzyTables } from '../testing/database';
+import { connectForTests, globalIndexId, joinIndex, truncateWuzzyTables } from '../testing/database';
 import { toVectorLiteral, type Embedder } from '../embed/embedder';
 import { reciprocalRankFusion } from './fusion';
 import { lexicalSearch } from './lexical';
@@ -14,12 +14,14 @@ const DIMENSIONS = 1536;
 
 let dataSource: DataSource | undefined;
 let reason = '';
+let scope = { indexId: '' };
 
 beforeAll(async () => {
   const connected = await connectForTests();
   dataSource = connected.dataSource;
   if (connected.skip) reason = connected.reason;
   await truncateWuzzyTables(dataSource);
+  if (dataSource) scope = { indexId: await globalIndexId(dataSource) };
 });
 
 afterEach(async () => {
@@ -74,6 +76,7 @@ async function addChunk(
       attestedAt: null,
     });
   }
+  await joinIndex(source, scope.indexId, document.id);
   const ordinal = await source.getRepository(ChunkEntity).count({ where: { documentId: document.id } });
   await source.getRepository(ChunkEntity).insert({
     documentId: document.id,
@@ -97,10 +100,10 @@ describe('BM25', () => {
     }
     await addChunk(source, 'https://x.test/rare', 'the paymaster sponsors gas for an account');
 
-    const hits = await lexicalSearch(source, 'paymaster', 10);
+    const hits = await lexicalSearch(source, 'paymaster', 10, scope);
     expect(hits).toHaveLength(1);
 
-    const both = await lexicalSearch(source, 'paymaster gas', 10);
+    const both = await lexicalSearch(source, 'paymaster gas', 10, scope);
     const [top] = both;
     const rare = await source.getRepository(DocumentEntity).findOneOrFail({
       where: { url: 'https://x.test/rare' },
@@ -114,7 +117,7 @@ describe('BM25', () => {
     await addChunk(source, 'https://x.test/once', 'paymaster');
     await addChunk(source, 'https://x.test/spam', Array(50).fill('paymaster').join(' '));
 
-    const hits = await lexicalSearch(source, 'paymaster', 10);
+    const hits = await lexicalSearch(source, 'paymaster', 10, scope);
     const scores = Object.fromEntries(hits.map((h) => [h.chunkId, h.score]));
     const values = Object.values(scores).sort((a, b) => b - a);
 
@@ -128,14 +131,14 @@ describe('BM25', () => {
     await addChunk(source, 'https://x.test/deploy', 'deploying a contract to the network');
 
     // "deploy" stems to the same lexeme as "deploying".
-    expect(await lexicalSearch(source, 'deploy', 10)).toHaveLength(1);
+    expect(await lexicalSearch(source, 'deploy', 10, scope)).toHaveLength(1);
   });
 
   it('returns nothing for a query with no matching terms', async () => {
     const source = ready();
     if (!source) return;
     await addChunk(source, 'https://x.test/a', 'deploying a contract');
-    expect(await lexicalSearch(source, 'zzzznonexistent', 10)).toHaveLength(0);
+    expect(await lexicalSearch(source, 'zzzznonexistent', 10, scope)).toHaveLength(0);
   });
 });
 
@@ -187,8 +190,8 @@ describe('hybrid search', () => {
 
     const service = new SearchService(source, embedder, buildSearchConfig({}));
 
-    const vectorOnly = await service.search('eth_getLogs', 10, 'vector');
-    const hybrid = await service.search('eth_getLogs', 10, 'hybrid');
+    const vectorOnly = await service.search('eth_getLogs', { topK: 10, mode: 'vector', scope });
+    const hybrid = await service.search('eth_getLogs', { topK: 10, mode: 'hybrid', scope });
 
     // The vector arm cannot tell the two apart on this query; BM25 can.
     expect(hybrid[0]!.url).toBe('https://x.test/getlogs');
@@ -212,7 +215,7 @@ describe('hybrid search', () => {
     };
 
     const service = new SearchService(source, embedder, buildSearchConfig({}));
-    const results = await service.search('paymaster', 10, 'lexical');
+    const results = await service.search('paymaster', { topK: 10, mode: 'lexical', scope });
 
     expect(results).toHaveLength(1);
     // Search still works with no embedding provider configured.
@@ -226,7 +229,7 @@ describe('hybrid search', () => {
     await addChunk(source, 'https://x.test/page', 'a second passage about the paymaster', oneHot(0));
 
     const service = new SearchService(source, topicEmbedder({ paymaster: 0 }), buildSearchConfig({}));
-    const results = await service.search('paymaster', 10);
+    const results = await service.search('paymaster', { topK: 10, scope });
 
     expect(results).toHaveLength(1);
     expect(results[0]!.url).toBe('https://x.test/page');
@@ -236,7 +239,7 @@ describe('hybrid search', () => {
     const source = ready();
     if (!source) return;
     const service = new SearchService(source, topicEmbedder({}), buildSearchConfig({}));
-    await expect(service.search('   ')).rejects.toThrow();
+    await expect(service.search('   ', { scope })).rejects.toThrow();
   });
 });
 

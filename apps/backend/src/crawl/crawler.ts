@@ -25,6 +25,18 @@ export interface CrawlOptions {
    * sites that listed thousands up front have spent the budget.
    */
   readonly maxPerHost?: number;
+  /**
+   * Index every crawled document joins. The global crawl passes the global
+   * index; a commissioned crawl passes its own, which is what keeps a private
+   * index's pages out of the public one.
+   */
+  readonly indexId?: string;
+  /**
+   * Whether to expand seeds through sitemaps and follow links out of them.
+   * Off for a commissioned crawl: those pages were paid for one by one, and
+   * discovery would fetch pages nobody asked for and overrun the page cap.
+   */
+  readonly discover?: boolean;
   /** Injected by tests; production uses the honest fetcher. */
   readonly fetcher?: Fetcher;
 }
@@ -139,10 +151,11 @@ export async function crawl(dataSource: DataSource, options: CrawlOptions): Prom
           robotsStatus: 'allowed',
           fetchedAt,
           canonical,
+          indexId: options.indexId ?? null,
         });
         summary[outcome] += 1;
 
-        if (isMarkdown) return;
+        if (isMarkdown || options.discover === false) return;
         const links = await discoverLinks(response.bytes, response.url, inScope);
         if (links.length > 0) await addRequests(links);
       },
@@ -153,7 +166,9 @@ export async function crawl(dataSource: DataSource, options: CrawlOptions): Prom
     new Configuration({ persistStorage: false }),
   );
 
-  await crawler.run(await discoverSeeds(options.seeds, fetcher, inScope));
+  await crawler.run(
+    await discoverSeeds(options.seeds, fetcher, inScope, options.discover !== false),
+  );
   return summary;
 }
 
@@ -162,11 +177,13 @@ async function discoverSeeds(
   seeds: readonly string[],
   fetcher: Fetcher,
   inScope: (url: string) => Promise<boolean>,
+  discover: boolean,
 ): Promise<string[]> {
   const candidates = new Set<string>();
 
   for (const seed of seeds) {
     candidates.add(seed);
+    if (!discover) continue;
     const robots = await loadRobots(new URL(seed).origin, fetcher);
     for (const url of await collectSitemapUrls(robots.sitemaps, fetcher)) {
       candidates.add(url);

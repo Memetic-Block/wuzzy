@@ -42,10 +42,32 @@ export function decodeAttestation(encoded: string): Record<string, string> {
 const CONTENT_FIELDS = ['content', 'markdown', 'body', 'text', 'html', 'snippet', 'title'];
 
 /**
+ * Field names that would tie an attestation to the index that paid for it.
+ * Provenance is a property of the fetch: a URL several indexes want is
+ * attested once, and a private index's membership must not be readable off
+ * Base by anyone watching the attester.
+ */
+const INDEX_FIELDS = ['index', 'indexid', 'index_id', 'owner', 'wallet', 'payer'];
+
+/**
  * Guards the invariant at the schema level, so adding a content field to
  * SCHEMA_DEFINITION fails the build rather than reaching mainnet.
  */
 export function schemaCarriesNoContent(definition = SCHEMA_DEFINITION): boolean {
-  const names = definition.split(',').map((field) => field.trim().split(/\s+/)[1]?.toLowerCase());
-  return !names.some((name) => name !== undefined && CONTENT_FIELDS.includes(name));
+  return !fieldNames(definition).some((name) => CONTENT_FIELDS.includes(name));
+}
+
+/**
+ * Guards the other half: an attestation says what was fetched, never who asked
+ * for it or which index it landed in.
+ */
+export function schemaCarriesNoIndex(definition = SCHEMA_DEFINITION): boolean {
+  return !fieldNames(definition).some((name) => INDEX_FIELDS.includes(name));
+}
+
+function fieldNames(definition: string): string[] {
+  return definition
+    .split(',')
+    .map((field) => field.trim().split(/\s+/)[1]?.toLowerCase())
+    .filter((name): name is string => name !== undefined);
 }
