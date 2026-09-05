@@ -37,8 +37,22 @@ export interface CrawlOptions {
    * discovery would fetch pages nobody asked for and overrun the page cap.
    */
   readonly discover?: boolean;
+  /**
+   * Called for each fetch that produced a document, with both the URL that was
+   * asked for and the one it resolved to. A caller that queued a URL cannot
+   * otherwise tell that a redirect satisfied it, because the document is
+   * stored under the URL the origin ended up serving.
+   */
+  readonly onDocument?: (event: DocumentEvent) => void;
   /** Injected by tests; production uses the honest fetcher. */
   readonly fetcher?: Fetcher;
+}
+
+export interface DocumentEvent {
+  readonly requestedUrl: string;
+  readonly url: string;
+  readonly documentId: string;
+  readonly outcome: FetchOutcome;
 }
 
 export type CrawlSummary = Record<FetchOutcome | 'failed', number>;
@@ -145,7 +159,7 @@ export async function crawl(dataSource: DataSource, options: CrawlOptions): Prom
           format: isMarkdown ? 'markdown' : 'html',
         });
 
-        const { outcome } = await recordFetch(dataSource, {
+        const { outcome, documentId } = await recordFetch(dataSource, {
           url: response.url,
           httpStatus: response.status,
           robotsStatus: 'allowed',
@@ -154,6 +168,14 @@ export async function crawl(dataSource: DataSource, options: CrawlOptions): Prom
           indexId: options.indexId ?? null,
         });
         summary[outcome] += 1;
+        if (documentId) {
+          options.onDocument?.({
+            requestedUrl: request.url,
+            url: response.url,
+            documentId,
+            outcome,
+          });
+        }
 
         if (isMarkdown || options.discover === false) return;
         const links = await discoverLinks(response.bytes, response.url, inScope);

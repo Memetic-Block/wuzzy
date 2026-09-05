@@ -38,6 +38,12 @@ export async function crawlIndexQueue(
   }
 
   const urls = pending.map((row) => row.url);
+
+  // A queued URL is satisfied by whatever it resolved to, which is not
+  // necessarily itself: documents are stored under the URL the origin finally
+  // served, so matching the queue on its own text would report a redirect as a
+  // failure and leave the index looking short of what was paid for.
+  const resolved = new Map<string, string>();
   const summary = await crawl(dataSource, {
     seeds: urls,
     indexId,
@@ -45,25 +51,21 @@ export async function crawlIndexQueue(
     maxConcurrency: options.maxConcurrency,
     minHostIntervalMs: options.minHostIntervalMs,
     fetcher: options.fetcher,
+    onDocument: (event) => resolved.set(event.requestedUrl, event.url),
   });
 
   // Every attempted URL leaves the queue, so a page that cannot be fetched
-  // does not keep the index short of ready forever. The note is deliberately
-  // about what is true of the store rather than about a cause: a URL that
-  // redirected is indexed and a member, just under the URL it resolved to.
-  const [{ indexed }] = (await dataSource.query(
-    `WITH attempted AS (
-       UPDATE index_urls u
-          SET crawled_at = now(),
-              error = CASE WHEN d.id IS NULL THEN 'no document at this exact URL' END
-         FROM (SELECT unnest($2::text[]) AS url) q
-         LEFT JOIN documents d ON d.url = q.url
-        WHERE u.index_id = $1 AND u.crawled_at IS NULL AND u.url = q.url
-        RETURNING d.id
-     )
-     SELECT count(*) FILTER (WHERE id IS NOT NULL)::int AS indexed FROM attempted`,
-    [indexId, urls],
-  )) as [{ indexed: number }];
+  // does not keep the index short of ready forever. What went wrong is
+  // recorded rather than retried silently.
+  await dataSource.query(
+    `UPDATE index_urls u
+        SET crawled_at = now(),
+            error = CASE WHEN q.resolved_url IS NULL
+                         THEN 'not indexed: fetch failed, disallowed or too thin' END
+       FROM (SELECT unnest($2::text[]) AS url, unnest($3::text[]) AS resolved_url) q
+      WHERE u.index_id = $1 AND u.crawled_at IS NULL AND u.url = q.url`,
+    [indexId, urls, urls.map((url) => resolved.get(url) ?? null)],
+  );
 
-  return { ...summary, requested: urls.length, indexed };
+  return { ...summary, requested: urls.length, indexed: resolved.size };
 }

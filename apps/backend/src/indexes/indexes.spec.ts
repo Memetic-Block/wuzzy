@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, describe, expect } from 'bun:test';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'bun:test';
 import 'reflect-metadata';
 import { createHash } from 'node:crypto';
 import { LogLevel, log as crawleeLog } from '@crawlee/basic';
@@ -396,6 +396,49 @@ describe('configurable indexes', () => {
     expect(status.pages).toBe(1);
     expect(status.pending).toBe(0);
     expect(status.attestations).toBe(0);
+  });
+
+  // Not a contract scenario: a regression guard for a case that reported a
+  // successful crawl as a failure, because documents are stored under the URL
+  // the origin finally served rather than the one that was queued.
+  it('counts a redirected URL as indexed, under the URL it resolved to', async () => {
+    const source = ready();
+    if (!source) return;
+
+    const mock = await site({
+      '/robots.txt': ROBOTS_ALLOW_ALL,
+      '/moved': page('Moved', PROSE),
+    });
+    mock.redirect('/old', '/moved');
+
+    const service = new IndexesService(source, indexesConfig);
+    const index = await service.create({
+      owner: WALLET_A,
+      name: 'Redirected',
+      urls: [`${mock.origin}/old`],
+    });
+
+    const result = await crawlIndexQueue(source, index.id);
+    expect(result.indexed).toBe(1);
+
+    // The queue row is satisfied, not errored, and the index holds the page.
+    const [row] = await source.query(
+      `SELECT error, crawled_at FROM index_urls WHERE index_id = $1`,
+      [index.id],
+    );
+    expect(row.error).toBeNull();
+    expect(row.crawled_at).not.toBeNull();
+
+    const status = await service.status(index);
+    expect(status.status).toBe('ready');
+    expect(status.pages).toBe(1);
+
+    const [member] = await source.query(
+      `SELECT d.url FROM index_documents m JOIN documents d ON d.id = m.document_id
+        WHERE m.index_id = $1`,
+      [index.id],
+    );
+    expect(member.url).toBe(`${mock.origin}/moved`);
   });
 
   scenario('scoped search returns only member documents', async () => {
