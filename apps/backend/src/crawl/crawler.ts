@@ -33,8 +33,14 @@ const MARKDOWN_LIKE = /^(text\/markdown|text\/x-markdown)/i;
  */
 export async function crawl(dataSource: DataSource, options: CrawlOptions): Promise<CrawlSummary> {
   const agent = userAgent();
-  const fetcher = options.fetcher ?? createFetcher(agent);
   const summary: CrawlSummary = { created: 0, unchanged: 0, changed: 0, skipped: 0, failed: 0 };
+
+  // Declared before `inScope` so the guard can close over it; robots.txt and
+  // sitemaps are fetched without a guard, since robots cannot gate the request
+  // that fetches robots.
+  const scopeGuard = async (url: string): Promise<boolean> => inScope(url);
+  const fetcher = options.fetcher ?? createFetcher(agent);
+  const pageFetcher = options.fetcher ?? createFetcher(agent, scopeGuard);
 
   const policies = new Map<string, RobotsPolicy>();
   const policyFor = async (url: string): Promise<RobotsPolicy> => {
@@ -67,9 +73,15 @@ export async function crawl(dataSource: DataSource, options: CrawlOptions): Prom
       maxRequestsPerCrawl: options.maxRequests,
       maxConcurrency: options.maxConcurrency ?? 4,
       requestHandler: async ({ request, addRequests }) => {
-        const response = await fetcher(request.url);
+        const response = await pageFetcher(request.url);
         const fetchedAt = new Date();
 
+        if (response.blockedRedirect) {
+          // The page moved somewhere out of scope. Not an error, and not
+          // something to record: the redirect target was never requested.
+          summary.skipped += 1;
+          return;
+        }
         if (response.status >= 400) {
           summary.failed += 1;
           return;

@@ -5,17 +5,27 @@ export interface MockSite {
   /** Every request the site received, in order, with the agent that made it. */
   readonly requests: { url: string; userAgent: string | undefined }[];
   setPage(path: string, html: string): void;
+  /** Makes `path` answer 302 to `target`, for redirect scenarios. */
+  redirect(path: string, target: string): void;
   close(): Promise<void>;
 }
 
 /** A site the crawler can be pointed at, so scenarios never touch the network. */
 export async function startMockSite(pages: Record<string, string>): Promise<MockSite> {
   const served = { ...pages };
+  const redirects: Record<string, string> = {};
   const requests: { url: string; userAgent: string | undefined }[] = [];
 
   const server: Server = createServer((request, response) => {
     const path = (request.url ?? '/').split('#')[0] ?? '/';
     requests.push({ url: path, userAgent: request.headers['user-agent'] });
+
+    const target = redirects[path];
+    if (target !== undefined) {
+      response.writeHead(302, { location: target });
+      response.end();
+      return;
+    }
 
     const body = served[path];
     if (body === undefined) {
@@ -41,6 +51,9 @@ export async function startMockSite(pages: Record<string, string>): Promise<Mock
     requests,
     setPage: (path, html) => {
       served[path] = html;
+    },
+    redirect: (path, target) => {
+      redirects[path] = target;
     },
     close: () => new Promise<void>((resolve) => server.close(() => resolve())),
   };

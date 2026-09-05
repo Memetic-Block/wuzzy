@@ -40,6 +40,12 @@ Feature: crawl provenance lifecycle
     Then the URL is treated as disallowed
     And no fetch_log row exists for it
 
+  Scenario: a redirect off the seeded hosts is not followed
+    Given a seeded page that redirects to a URL on another host
+    When the crawler fetches it
+    Then no request is made to the other host
+    And no document row exists for either URL
+
   Scenario: every request identifies the crawler honestly
     Given a site whose robots.txt and pages are both fetched during a crawl
     When the crawl completes

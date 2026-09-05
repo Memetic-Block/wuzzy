@@ -180,6 +180,29 @@ describe('crawl provenance lifecycle', () => {
     expect(log.map((row) => row.url)).not.toContain(`${mock.origin}/private/secret`);
   });
 
+  scenario('a redirect off the seeded hosts is not followed', async () => {
+    const source = db();
+    if (!source) return;
+
+    // A second origin stands in for anywhere the crawler was not sent.
+    const elsewhere = await site({
+      '/robots.txt': ROBOTS_ALLOW_ALL,
+      '/landing': page('Elsewhere', PROSE),
+    });
+    const seeded = await site({ '/robots.txt': ROBOTS_ALLOW_ALL });
+    seeded.redirect('/moved', `${elsewhere.origin}/landing`);
+
+    await crawl(source, { seeds: [`${seeded.origin}/moved`], maxRequests: 5 });
+
+    // The point is not that the page was skipped, but that the other host was
+    // never asked for anything: its robots.txt was never read, so no request to
+    // it is one we are entitled to make.
+    expect(elsewhere.requests).toHaveLength(0);
+
+    const documents = await source.getRepository(DocumentEntity).find();
+    expect(documents).toHaveLength(0);
+  });
+
   scenario('every request identifies the crawler honestly', async () => {
     const source = db();
     if (!source) return;

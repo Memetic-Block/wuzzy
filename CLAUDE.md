@@ -133,6 +133,12 @@ bytes for a page that is not UTF-8 and would therefore corrupt the raw hash; and
 fetch is what makes the honest user-agent checkable on every request rather than on the ones a
 hook happens to cover. robots.txt and sitemaps are fetched the same way, then parsed.
 
+Scope is the exact `host` of each seed, not the registrable domain, so seeding `docs.base.org`
+never reaches `base.org` or a sibling subdomain. Redirects are followed by hand rather than by
+`fetch`, and each hop is re-checked against that scope before it is requested: following them
+automatically would let a 301 carry the crawler onto a host whose robots.txt was never read,
+which is a request we are not entitled to make.
+
 **Search is hybrid, and the ranking is ours.** BM25 and vector similarity run
 independently over `chunks` and their rankings are fused with Reciprocal Rank Fusion
 ([search/fusion.ts](apps/backend/src/search/fusion.ts)). Postgres supplies tokenising,
