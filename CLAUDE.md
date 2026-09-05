@@ -174,6 +174,25 @@ there is one corpus. [admin/](apps/backend/src/admin/) groups by host because th
 only natural grouping the schema supports. Anything phrased as "indexes people created"
 needs a schema change first, not an admin query.
 
+## Running the demo
+
+[compose.demo.yml](compose.demo.yml) brings the whole loop up in containers: pgvector, both
+apps, a metered second backend, and two stand-ins that let it run with no API key and no
+funds (`scripts/demo/`, each loudly labelled in its own source).
+
+```sh
+podman compose -f compose.demo.yml up --build -d
+podman compose -f compose.demo.yml exec backend bun apps/backend/src/cli/wuzzy.ts crawl --per-host=250
+podman compose -f compose.demo.yml exec backend bun apps/backend/src/cli/wuzzy.ts embed
+```
+
+Public site on :8080, admin on 127.0.0.1:8081, metered API on :3001, database on **5433**
+(5432 is often taken by another project on this machine).
+
+**Do not point `bun test` at the demo database.** The specs truncate every table in
+`beforeAll`, so `POSTGRES_PORT=5433 bun test` silently destroys the corpus. Run tests against
+their own instance on another port.
+
 ## Conventions
 
 Bun auto-loads `.env`, so the app and the migration CLI read the same values. Both build
