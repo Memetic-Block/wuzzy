@@ -24,9 +24,11 @@ export function buildIndexesConfig(
   return {
     globalSlug: env.WUZZY_GLOBAL_INDEX_SLUG ?? 'global',
     operatorWallet: wallet ? wallet.toLowerCase() : null,
-    // A few hundred pages in v0: the cap exists so a single payment cannot
-    // commission a crawl big enough to be impolite to the sites it targets.
-    pageCap: Number(env.WUZZY_INDEX_PAGE_CAP ?? 250),
+    // The cap exists so a single payment cannot commission a crawl big enough
+    // to be impolite to the sites it targets. Per-host request spacing is what
+    // actually keeps the crawl polite, so this is really a ceiling on what one
+    // payment can set off, and 1000 pages is $10 at the default per-page price.
+    pageCap: Number(env.WUZZY_INDEX_PAGE_CAP ?? 1000),
     pricePerPage: env.WUZZY_INDEX_PRICE_PER_PAGE ?? '$0.01',
   };
 }
