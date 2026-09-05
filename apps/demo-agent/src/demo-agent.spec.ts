@@ -4,6 +4,15 @@ import { mkdtemp, readFile, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { generatePrivateKey } from 'viem/accounts';
+import {
+  apiBase,
+  appendToIndex,
+  commissionIndex,
+  indexStatus,
+  listIndexes,
+  NotPermittedError,
+  PageCapError,
+} from './indexes';
 import { paidSearch, WalletRequiredError } from './search';
 import { createWallet, loadWallet, NoWalletError, walletPath } from './wallet';
 
@@ -201,5 +210,95 @@ describe('paid search', () => {
         maxValue: 1n,
       }),
     ).rejects.toThrow();
+  });
+});
+
+/** An index API that refuses what the real one refuses, and settles otherwise. */
+async function startIndexApi() {
+  const requests: { path: string; body: unknown; paid: boolean }[] = [];
+  const server = createServer((request, response) => {
+    let raw = '';
+    request.on('data', (chunk) => {
+      raw += chunk;
+    });
+    request.on('end', () => {
+      const path = (request.url ?? '/').split('?')[0] ?? '/';
+      const body = raw === '' ? {} : JSON.parse(raw);
+      const paid = Boolean(request.headers['x-payment']);
+      requests.push({ path, body, paid });
+      response.setHeader('content-type', 'application/json');
+
+      if (request.method === 'GET' && path === '/indexes') {
+        response.end(JSON.stringify({ indexes: [{ slug: 'global', name: 'Wuzzy global index' }] }));
+        return;
+      }
+      if (request.method === 'GET') {
+        response.end(JSON.stringify({ slug: 'mine', status: 'crawling', pages: 2, pending: 1 }));
+        return;
+      }
+      if (Array.isArray(body.urls) && body.urls.length > 3) {
+        response.statusCode = 400;
+        response.end(JSON.stringify({ error: 'covers 4 pages; the cap is 3', pageCap: 3 }));
+        return;
+      }
+      if (path.endsWith('/urls') && !paid) {
+        response.statusCode = 403;
+        response.end(JSON.stringify({ error: 'only the index owner may append' }));
+        return;
+      }
+      response.statusCode = 201;
+      response.end(JSON.stringify({ id: 'abc', slug: 'mine', status: 'pending', pending: 1 }));
+    });
+  });
+
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  servers.push(server);
+  const address = server.address();
+  if (address === null || typeof address === 'string') throw new Error('no port');
+  return { url: `http://127.0.0.1:${address.port}/search`, requests };
+}
+
+describe('commissioned indexes', () => {
+  it('derives the API base from the search endpoint people already configure', () => {
+    expect(apiBase('https://wuzzy.io/search')).toBe('https://wuzzy.io');
+    expect(apiBase('http://localhost:3000/search/')).toBe('http://localhost:3000');
+    // An endpoint that is not a /search path is left alone rather than mangled.
+    expect(apiBase('https://wuzzy.io/api')).toBe('https://wuzzy.io/api');
+  });
+
+  it('commissions an index and reports what is still pending', async () => {
+    const api = await startIndexApi();
+    const outcome = await commissionIndex({
+      api: api.url,
+      urls: ['https://docs.base.org/a'],
+      name: 'Mine',
+      owner: '0x1111111111111111111111111111111111111111',
+    });
+
+    expect(outcome.index.slug).toBe('mine');
+    expect(outcome.index.pending).toBe(1);
+    expect(api.requests[0]!.path).toBe('/indexes');
+    expect((api.requests[0]!.body as { urls: string[] }).urls).toEqual(['https://docs.base.org/a']);
+  });
+
+  it('says which cap was exceeded rather than failing opaquely', async () => {
+    const api = await startIndexApi();
+    await expect(
+      commissionIndex({ api: api.url, urls: ['a', 'b', 'c', 'd'].map((p) => `https://x.test/${p}`) }),
+    ).rejects.toBeInstanceOf(PageCapError);
+  });
+
+  it('reports a refused append as a permission problem, not a crash', async () => {
+    const api = await startIndexApi();
+    await expect(
+      appendToIndex({ api: api.url, index: 'mine', urls: ['https://x.test/a'] }),
+    ).rejects.toBeInstanceOf(NotPermittedError);
+  });
+
+  it('reads the catalog and an index status without paying', async () => {
+    const api = await startIndexApi();
+    expect((await listIndexes(api.url)).map((index) => index.slug)).toEqual(['global']);
+    expect((await indexStatus(api.url, 'mine')).status).toBe('crawling');
+    expect(api.requests.every((request) => !request.paid)).toBe(true);
   });
 });

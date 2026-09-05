@@ -40,6 +40,8 @@ export interface SearchOptions {
   /** Ceiling in atomic USDC units. Refuses to pay more, whatever is asked. */
   readonly maxValue?: bigint;
   readonly topK?: number;
+  /** Index id or slug. Omit to search the global index. */
+  readonly index?: string;
   readonly fetchImpl?: typeof globalThis.fetch;
 }
 
@@ -61,7 +63,11 @@ export async function paidSearch(options: SearchOptions): Promise<SearchOutcome>
   const request = {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ query: options.query, topK: options.topK ?? 5 }),
+    body: JSON.stringify({
+      query: options.query,
+      topK: options.topK ?? 5,
+      ...(options.index ? { index: options.index } : {}),
+    }),
   } as const;
 
   // Without a wallet, try unpaid: an endpoint in dev mode serves openly, and
