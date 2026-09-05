@@ -136,9 +136,14 @@ so it can be split out into its own repository whenever that is useful.
 ```sh
 bun run demo wallet                                   # fresh key, stored outside the repo
 bun run demo search "how do I deploy a contract"      # 402 -> pay -> results
+
+bun run demo indexes                                  # the public catalog, free to read
+bun run demo commission --name="My corpus" --private <url>...
+bun run demo search "..." --index=my-corpus
 ```
 
-Against an endpoint in dev mode it needs no wallet at all.
+Searching needs no wallet against an endpoint in dev mode. Commissioning an index always
+needs one, funded or not, because an index has an owner.
 
 ## Local development
 
@@ -174,12 +179,25 @@ indexes it cannot model.
 | `documents` | Latest state per URL: canonical content, both hashes, protocol version, embed and attestation bookkeeping |
 | `fetch_log` | Append-only record of every fetch actually performed |
 | `chunks` | Embeddable slices with a `vector(1536)` column and an hnsw index |
+| `indexes` | One row per index, including the global one. Owner, visibility, read policy, page cap |
+| `index_documents` | Membership. A URL two indexes both want is stored, crawled and attested once |
+| `index_urls` | Pages an index has paid for and not yet received; `wuzzy crawl --index` drains it |
+| `index_readers` | The allowlist for an index whose read policy is `allowlist` |
+
+Every index is the same primitive configured differently, over one shared document store.
+"Global" is a row like any other, owned by the operator wallet and listed publicly, and an
+unscoped `/search` is a scoped search that resolved to it. Agents commission their own by
+paying per page: `POST /indexes` with a URL list, `POST /indexes/:ref/urls` to append, both
+owner-gated. Attestations never learn that indexes exist, because provenance is a property of
+the fetch rather than of the index.
 
 `/search` is hybrid: BM25 and vector similarity run independently over `chunks` and their
 rankings are fused with Reciprocal Rank Fusion, then collapsed to the best chunk per document
 and joined back to `documents` so every result carries the provenance block a paying agent
 needs to check the claim itself. `mode` in the request body, or `SEARCH_MODE`, selects
-`hybrid` (default), `vector` or `lexical`; `lexical` needs no embedding provider.
+`hybrid` (default), `vector` or `lexical`; `lexical` needs no embedding provider. `index`
+scopes the query, and scopes the BM25 corpus statistics with it, since IDF is a property of
+the collection being searched.
 
 The BM25 scoring is computed in SQL rather than taken from `ts_rank`, which is not BM25 and
 has neither an IDF term nor length normalisation. Each result reports the rank each arm gave
