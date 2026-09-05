@@ -90,6 +90,19 @@ bun run dev:frontend     # search UI on :8080
 To see the metered path, run a second backend with `X402_ENABLED=true` and
 `X402_FACILITATOR_URL=http://127.0.0.1:39600`, then point the demo agent at it.
 
+## Admin view
+
+`/admin` is a read-only view of the index: totals, which hosts the corpus came from, the
+document list with filters, per-document provenance and fetch history, and recent crawl
+activity. It is **off unless `ADMIN_ENABLED=true`**, because it exposes crawl errors and
+skip reasons, and a disabled instance answers 404 rather than 403 so it does not advertise
+itself. Set `ADMIN_TOKEN` for anything not bound to localhost; without it there is no auth
+at all.
+
+There is one global index. Documents are not owned by anyone and there is no tenancy, so
+"which index" is not a question the schema can answer yet; the closest grouping is the host
+a document came from, which the admin view shows.
+
 ## Demo agent
 
 [apps/demo-agent](apps/demo-agent/) is a paying client, and doubles as the integration

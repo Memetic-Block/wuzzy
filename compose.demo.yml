@@ -69,6 +69,9 @@ services:
       # A browser cannot sign an x402 payment, so the UI talks to an open
       # instance. The metered path is `backend-metered` below.
       X402_ENABLED: "false"
+      # The admin view is opt-in and read-only. Left untokened here because the
+      # demo binds to localhost; set ADMIN_TOKEN for anything reachable.
+      ADMIN_ENABLED: "true"
     ports:
       - "3000:3000"
     depends_on:

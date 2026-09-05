@@ -140,6 +140,11 @@ unmatched, verify with the facilitator, and settle only after the handler produc
 so a failed query is never charged for. Scenarios run against a mock facilitator; real
 settlement is `@mainnet @manual`.
 
+**The index is global and has no tenancy.** `documents` has no owner, workspace or index id:
+there is one corpus. [admin/](apps/backend/src/admin/) groups by host because that is the
+only natural grouping the schema supports. Anything phrased as "indexes people created"
+needs a schema change first, not an admin query.
+
 ## Conventions
 
 Bun auto-loads `.env`, so the app and the migration CLI read the same values. Both build
