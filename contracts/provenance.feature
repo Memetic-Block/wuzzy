@@ -27,6 +27,16 @@ Feature: crawl provenance lifecycle
     And embedded_at is cleared so the embed pass will re-embed it
     And attestation_uid is cleared so the attestor will re-attest it
 
+  Scenario: a request that returns an error is still recorded
+    When the crawler fetches a URL that answers with an error status
+    Then a fetch_log row records the URL, the status and the error
+    And no document row is created for it
+
+  Scenario: a request that returns something unindexable is still recorded
+    When the crawler fetches a URL that answers with a non-page body
+    Then a fetch_log row records the URL and why it was unusable
+    And no document row is created for it
+
   Scenario: disallowed URLs are never fetched
     Given a URL disallowed by the site's robots.txt for WuzzyBot
     When seed discovery runs for that site

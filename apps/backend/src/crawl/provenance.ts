@@ -16,6 +16,15 @@ export interface FetchRecord {
   readonly indexId?: string | null;
 }
 
+/** A request that went out and came back unusable, or did not come back. */
+export interface FailedFetch {
+  readonly url: string;
+  /** Null when the request never got a response at all. */
+  readonly httpStatus: number | null;
+  readonly error: string;
+  readonly fetchedAt: Date;
+}
+
 export interface RecordedFetch {
   readonly outcome: FetchOutcome;
   readonly documentId: string | null;
@@ -102,5 +111,38 @@ export async function recordFetch(
 
     if (!existing) return { outcome: 'created', documentId: saved.id };
     return { outcome: changed ? 'changed' : 'unchanged', documentId: saved.id };
+  });
+}
+
+/**
+ * Records a request that produced no document: an error status, a body that is
+ * not a page, or a transport failure.
+ *
+ * The trail is meant to account for every request we made of someone else's
+ * server, not only the ones that worked. A crawl that quietly forgets its 404s
+ * cannot answer "what did you fetch from us, and when", which is the question
+ * the whole provenance story exists to answer.
+ */
+export async function recordFailedFetch(
+  dataSource: DataSource,
+  record: FailedFetch,
+): Promise<void> {
+  await dataSource.transaction(async (manager) => {
+    const existing = await manager
+      .getRepository(DocumentEntity)
+      .findOne({ where: { url: record.url } });
+
+    await manager.getRepository(FetchLogEntity).save({
+      // Attached to the document when one exists, so a page that used to work
+      // shows the attempt in its own history rather than only in the aggregate.
+      documentId: existing?.id ?? null,
+      url: record.url,
+      httpStatus: record.httpStatus,
+      rawHash: null,
+      contentHash: null,
+      contentChanged: false,
+      error: record.error,
+      fetchedAt: record.fetchedAt,
+    });
   });
 }

@@ -110,7 +110,9 @@ describe('crawl provenance lifecycle', () => {
     expect(document.embeddedAt).toBeNull();
     expect(document.attestationUid).toBeNull();
 
-    const log = await source.getRepository(FetchLogEntity).find();
+    // Scoped to the page under test: the fixture's nav links to a path this
+    // site does not serve, and that 404 is a request we made and so logged.
+    const log = await source.getRepository(FetchLogEntity).find({ where: { url: document.url } });
     expect(log).toHaveLength(1);
     expect(log[0]!.rawHash).toBe(document.rawHash);
     expect(log[0]!.contentHash).toBe(document.contentHash);
@@ -143,7 +145,7 @@ describe('crawl provenance lifecycle', () => {
     expect(after.embeddedAt).toEqual(embeddedAt);
     expect(after.attestationUid).toBe(attestationUid);
 
-    const log = await source.getRepository(FetchLogEntity).find();
+    const log = await source.getRepository(FetchLogEntity).find({ where: { url: after.url } });
     expect(log).toHaveLength(2);
     expect(log.filter((row) => row.contentChanged)).toHaveLength(0);
   });
@@ -175,7 +177,9 @@ describe('crawl provenance lifecycle', () => {
     expect(after.embeddedAt).toBeNull();
     expect(after.attestationUid).toBeNull();
 
-    const log = await source.getRepository(FetchLogEntity).find({ order: { id: 'ASC' } });
+    const log = await source
+      .getRepository(FetchLogEntity)
+      .find({ where: { url: after.url }, order: { id: 'ASC' } });
     expect(log).toHaveLength(2);
     expect(log[1]!.contentChanged).toBe(true);
   });
@@ -290,7 +294,9 @@ describe('crawl provenance lifecycle', () => {
 
     expect(await source.getRepository(DocumentEntity).find()).toHaveLength(0);
 
-    const log = await source.getRepository(FetchLogEntity).find();
+    const log = await source
+      .getRepository(FetchLogEntity)
+      .find({ where: { skippedReason: 'thin' } });
     expect(log).toHaveLength(1);
     expect(log[0]!.skippedReason).toBe('thin');
     expect(log[0]!.contentHash).toBeNull();
@@ -342,5 +348,55 @@ describe('sitemap discovery', () => {
 
     const urls = (await source.getRepository(DocumentEntity).find()).map((d) => d.url).sort();
     expect(urls).toEqual([`${mock.origin}/`, `${mock.origin}/guide`, `${mock.origin}/reference`]);
+  });
+});
+
+describe('failed fetches leave a trail', () => {
+  scenario('a request that returns an error is still recorded', async () => {
+    const source = db();
+    if (!source) return;
+
+    const mock = await site({ '/robots.txt': ROBOTS_ALLOW_ALL, '/': page('Home', PROSE, ['/gone']) });
+    // /gone is linked but the site answers 404 for it.
+
+    await crawl(source, { seeds: [`${mock.origin}/`] });
+
+    const failures = await source.getRepository(FetchLogEntity).find({
+      where: { url: `${mock.origin}/gone` },
+    });
+    expect(failures).toHaveLength(1);
+    expect(failures[0]!.httpStatus).toBe(404);
+    expect(failures[0]!.error).toBe('HTTP 404');
+    expect(failures[0]!.contentHash).toBeNull();
+
+    // The request is accounted for without inventing a document for it.
+    const documents = await source.getRepository(DocumentEntity).find();
+    expect(documents.map((d) => d.url)).toEqual([`${mock.origin}/`]);
+  });
+
+  scenario('a request that returns something unindexable is still recorded', async () => {
+    const source = db();
+    if (!source) return;
+
+    const mock = await site({
+      '/robots.txt': ROBOTS_ALLOW_ALL,
+      '/': page('Home', PROSE, ['/data.xml']),
+      // Served as application/xml by the mock site: a real response, not a page.
+      '/data.xml': '<?xml version="1.0"?><data><value>42</value></data>',
+    });
+
+    await crawl(source, { seeds: [`${mock.origin}/`] });
+
+    const [row] = await source.getRepository(FetchLogEntity).find({
+      where: { url: `${mock.origin}/data.xml` },
+    });
+    expect(row).toBeDefined();
+    expect(row!.httpStatus).toBe(200);
+    expect(row!.error).toContain('unusable content-type');
+    expect(row!.contentHash).toBeNull();
+
+    expect((await source.getRepository(DocumentEntity).find()).map((d) => d.url)).toEqual([
+      `${mock.origin}/`,
+    ]);
   });
 });

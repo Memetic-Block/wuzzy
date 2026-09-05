@@ -4,7 +4,7 @@ import { JSDOM } from 'jsdom';
 import { canonicalize } from '../canonicalize/v1';
 import { createFetcher, type Fetcher } from './http';
 import { loadRobots, type RobotsPolicy } from './robots';
-import { recordFetch, type FetchOutcome } from './provenance';
+import { recordFailedFetch, recordFetch, type FetchOutcome } from './provenance';
 import { collectSitemapUrls } from './sitemap';
 import { userAgent } from './user-agent';
 
@@ -142,6 +142,12 @@ export async function crawl(dataSource: DataSource, options: CrawlOptions): Prom
           return;
         }
         if (response.status >= 400) {
+          await recordFailedFetch(dataSource, {
+            url: response.url,
+            httpStatus: response.status,
+            error: `HTTP ${response.status}`,
+            fetchedAt,
+          });
           summary.failed += 1;
           return;
         }
@@ -149,6 +155,12 @@ export async function crawl(dataSource: DataSource, options: CrawlOptions): Prom
         const contentType = response.contentType ?? '';
         const isMarkdown = MARKDOWN_LIKE.test(contentType);
         if (!isMarkdown && !HTML_LIKE.test(contentType)) {
+          await recordFailedFetch(dataSource, {
+            url: response.url,
+            httpStatus: response.status,
+            error: `unusable content-type: ${contentType || 'none'}`,
+            fetchedAt,
+          });
           summary.failed += 1;
           return;
         }
@@ -181,7 +193,15 @@ export async function crawl(dataSource: DataSource, options: CrawlOptions): Prom
         const links = await discoverLinks(response.bytes, response.url, inScope);
         if (links.length > 0) await addRequests(links);
       },
-      failedRequestHandler: async () => {
+      failedRequestHandler: async ({ request }, error) => {
+        // Crawlee has exhausted its retries. The request was made, so it is
+        // part of the trail even though nothing usable came back.
+        await recordFailedFetch(dataSource, {
+          url: request.url,
+          httpStatus: null,
+          error: error instanceof Error ? error.message : String(error),
+          fetchedAt: new Date(),
+        });
         summary.failed += 1;
       },
     },
