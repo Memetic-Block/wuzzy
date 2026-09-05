@@ -9,8 +9,12 @@ WORKDIR /app
 
 # Workspace-aware install: every workspace package.json must be present.
 COPY package.json bun.lock ./
+# Every workspace manifest has to be present for a workspace-aware install,
+# including ones this image does not run: bun resolves the whole graph.
 COPY apps/backend/package.json ./apps/backend/
 COPY apps/frontend/package.json ./apps/frontend/
+COPY apps/admin/package.json ./apps/admin/
+COPY packages/static-site/package.json ./packages/static-site/
 # Hoisted rather than bun's default isolated layout. Isolated puts every package
 # in a content-addressed .bun store and makes node_modules/<name> a symlink into
 # it, so deleting a top-level entry frees nothing. Hoisted gives real

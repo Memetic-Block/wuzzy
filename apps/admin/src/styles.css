@@ -1,0 +1,4 @@
+@import "tailwindcss";
+
+/* Class detection scans this app's sources only. */
+@source "../src";

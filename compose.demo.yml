@@ -115,3 +115,17 @@ services:
       - "8080:80"
     depends_on:
       - backend
+
+  # A separate app on its own origin, so it can be kept off the public internet
+  # rather than hidden behind a path on the public site. Bound to loopback here:
+  # the demo runs it without a token.
+  admin:
+    build:
+      context: .
+      dockerfile: apps/admin/Dockerfile
+    environment:
+      BACKEND_ORIGIN: http://backend:3000
+    ports:
+      - "127.0.0.1:8081:80"
+    depends_on:
+      - backend

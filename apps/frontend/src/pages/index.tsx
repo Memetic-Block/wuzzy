@@ -1,4 +1,4 @@
-import { h } from '../jsx/jsx-runtime';
+import { h } from '@wuzzy/static-site';
 import { Layout } from '../layout';
 
 export default () => (

@@ -1,0 +1,6 @@
+{
+  "name": "@wuzzy/static-site",
+  "private": true,
+  "main": "src/index.ts",
+  "type": "module"
+}

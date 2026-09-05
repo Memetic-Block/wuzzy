@@ -90,14 +90,26 @@ bun run dev:frontend     # search UI on :8080
 To see the metered path, run a second backend with `X402_ENABLED=true` and
 `X402_FACILITATOR_URL=http://127.0.0.1:39600`, then point the demo agent at it.
 
-## Admin view
+## Admin app
 
-`/admin` is a read-only view of the index: totals, which hosts the corpus came from, the
-document list with filters, per-document provenance and fetch history, and recent crawl
-activity. It is **off unless `ADMIN_ENABLED=true`**, because it exposes crawl errors and
-skip reasons, and a disabled instance answers 404 rather than 403 so it does not advertise
-itself. Set `ADMIN_TOKEN` for anything not bound to localhost; without it there is no auth
-at all.
+[apps/admin](apps/admin/) is a read-only view of the index: totals, which hosts the corpus
+came from, the document list with filters, per-document provenance and fetch history, and
+recent crawl activity.
+
+It is a **separate app on its own origin**, not a page on the public site, so it can be kept
+off the public internet entirely rather than hidden behind a path. Three things enforce that,
+and each is checked by a test:
+
+- The public site does not build an admin page or ship its script.
+- The public site's nginx returns 404 for `/api/admin/`, and its dev server refuses the same
+  prefix, so the two cannot disagree.
+- The admin site's nginx proxies **only** `/api/admin/`; the public API is not reachable
+  through it.
+
+The backend half is off unless `ADMIN_ENABLED=true`, and a disabled instance answers 404
+rather than 403 so it does not advertise itself. Set `ADMIN_TOKEN` for anything not bound to
+loopback; without it there is no auth at all. In `compose.demo.yml` the admin app is
+published on `127.0.0.1:8081` rather than all interfaces.
 
 There is one global index. Documents are not owned by anyone and there is no tenancy, so
 "which index" is not a question the schema can answer yet; the closest grouping is the host

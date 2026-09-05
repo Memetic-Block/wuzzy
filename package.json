@@ -2,7 +2,8 @@
   "name": "wuzzy",
   "private": true,
   "workspaces": [
-    "apps/*"
+    "apps/*",
+    "packages/*"
   ],
   "scripts": {
     "dev:backend": "bun --watch apps/backend/src/main.ts",

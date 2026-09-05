@@ -1,17 +1,13 @@
-import { h } from '../jsx/jsx-runtime';
+import { h } from '@wuzzy/static-site';
 import { Layout } from '../layout';
 
 export default () => (
   <Layout title="Wuzzy admin">
-    <div class="flex items-baseline justify-between">
-      <h1 class="text-2xl font-bold">Index admin</h1>
-      <a class="text-sm underline" href="/">
-        back to search
-      </a>
-    </div>
+    <h1 class="text-2xl font-bold">Wuzzy index admin</h1>
     <p class="mt-1 text-sm text-gray-600">
       Read-only view of the global index. There is one corpus: documents, their provenance
-      trail, and their chunks.
+      trail, and their chunks. This is a separate app from the public site and is not
+      reachable from it.
     </p>
 
     <p id="admin-error" class="mt-4 hidden rounded bg-red-50 px-3 py-2 text-sm text-red-800"></p>

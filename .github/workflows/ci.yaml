@@ -70,7 +70,7 @@ jobs:
       packages: write
     strategy:
       matrix:
-        app: [backend, frontend]
+        app: [backend, frontend, admin]
     steps:
       - uses: actions/checkout@v5
 

@@ -140,6 +140,13 @@ unmatched, verify with the facilitator, and settle only after the handler produc
 so a failed query is never charged for. Scenarios run against a mock facilitator; real
 settlement is `@mainnet @manual`.
 
+**The admin UI is a separate app, deliberately.** [apps/admin](apps/admin/) has its own
+origin, image and nginx config so it can be kept off the public internet; it is not a route
+on the public site. Keep it that way: the public site must never build an admin page, and its
+nginx and dev server both refuse `/api/admin/`. Both apps render through
+[packages/static-site](packages/static-site/), so the shared builder cannot drift between
+them.
+
 **The index is global and has no tenancy.** `documents` has no owner, workspace or index id:
 there is one corpus. [admin/](apps/backend/src/admin/) groups by host because that is the
 only natural grouping the schema supports. Anything phrased as "indexes people created"
