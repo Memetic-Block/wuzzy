@@ -5,6 +5,7 @@
 (function () {
   var form = document.getElementById('search-form');
   var input = document.getElementById('query');
+  var picker = document.getElementById('index');
   var status = document.getElementById('status');
   var results = document.getElementById('results');
 
@@ -50,6 +51,28 @@
       .join('');
   }
 
+  // The catalog lists the indexes the operator publishes. Unlisted ones are
+  // absent from it, so there is nothing here to reveal that they exist.
+  fetch('/api/indexes')
+    .then(function (response) {
+      return response.ok ? response.json() : { indexes: [] };
+    })
+    .then(function (body) {
+      var catalog = body.indexes || [];
+      if (catalog.length < 2) return;
+
+      picker.innerHTML = catalog
+        .map(function (index) {
+          return '<option value="' + escape(index.slug) + '">' + escape(index.name) + '</option>';
+        })
+        .join('');
+      picker.hidden = false;
+    })
+    .catch(function () {
+      // A missing catalog is not a reason to break search: the field stays
+      // hidden and every query goes to the global index, as before.
+    });
+
   form.addEventListener('submit', function (event) {
     event.preventDefault();
     var query = input.value.trim();
@@ -62,7 +85,11 @@
     fetch('/api/search', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ query: query, topK: 10 }),
+      body: JSON.stringify(
+        picker.hidden || !picker.value
+          ? { query: query, topK: 10 }
+          : { query: query, topK: 10, index: picker.value },
+      ),
     })
       .then(function (response) {
         return response.json().then(function (body) {

@@ -9,7 +9,7 @@ export default () => (
       crawled and when.
     </p>
 
-    <form id="search-form" class="mt-8 flex gap-2">
+    <form id="search-form" class="mt-8 flex flex-wrap gap-2">
       <input
         id="query"
         name="query"
@@ -18,6 +18,14 @@ export default () => (
         placeholder="Ask the index something"
         class="flex-1 rounded border border-gray-300 px-3 py-2"
       />
+      {/* Populated from the public catalog, and hidden while there is only one
+          index to choose, so the control appears when it means something. */}
+      <select
+        id="index"
+        name="index"
+        hidden
+        class="rounded border border-gray-300 px-3 py-2"
+      ></select>
       <button
         type="submit"
         class="cursor-pointer rounded border border-gray-300 px-4 py-2 hover:bg-gray-100"

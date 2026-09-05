@@ -489,7 +489,10 @@ describe('configurable indexes', () => {
       const ids = body.indexes.map((index) => index.id);
       expect(ids).not.toContain(hidden.id);
       expect(ids).toContain(shown.id);
-      expect(body.indexes.map((index) => index.slug)).toContain('global');
+
+      // Global leads, whatever was created since: anything rendering this as a
+      // choice should default to the index an unscoped search would read.
+      expect(body.indexes[0]!.slug).toBe('global');
     } finally {
       await app.close();
     }

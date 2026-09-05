@@ -129,13 +129,23 @@ export class IndexesService {
     return found;
   }
 
-  /** Listed indexes only. Unlisted ones are absent, not redacted. */
+  /**
+   * Listed indexes only. Unlisted ones are absent, not redacted.
+   *
+   * The global index leads whatever was created since, because it is the one an
+   * unscoped search reads and therefore the right default for anything that
+   * renders this as a choice.
+   */
   async catalog(): Promise<IndexSummary[]> {
     const rows = await this.repository().find({
       where: { visibility: 'listed' },
       order: { createdAt: 'DESC' },
     });
-    return rows.map(summarize);
+    // Sort is stable, so newest-first survives inside each group.
+    const { globalSlug } = this.config;
+    return rows
+      .sort((a, b) => Number(b.slug === globalSlug) - Number(a.slug === globalSlug))
+      .map(summarize);
   }
 
   async status(index: IndexEntity): Promise<IndexStatusReport> {
