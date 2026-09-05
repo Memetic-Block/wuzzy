@@ -17,6 +17,16 @@ export interface ChunkOptions {
   readonly maxChars?: number;
   /** Trailing characters of the previous chunk repeated into the next. */
   readonly overlapChars?: number;
+  /**
+   * The document's title, prepended as the root heading of every chunk.
+   *
+   * Readability lifts the `<h1>` out of the body and into the title, so a page
+   * frequently never states its own name in the text that gets indexed: on a
+   * sample of docs.base.org that was true of nearly half the corpus. Without
+   * this, searching for a page by its own name cannot match it, lexically or
+   * semantically.
+   */
+  readonly title?: string | null;
 }
 
 const DEFAULT_MAX_CHARS = 1_800;
@@ -28,12 +38,14 @@ export function chunk(markdown: string, options: ChunkOptions = {}): Chunk[] {
   const maxChars = options.maxChars ?? DEFAULT_MAX_CHARS;
   const overlapChars = options.overlapChars ?? DEFAULT_OVERLAP_CHARS;
 
+  const root = options.title?.trim() ? `# ${options.title.trim()}` : '';
   const sections = splitByHeading(markdown);
   const texts: string[] = [];
 
   for (const section of sections) {
-    for (const piece of packParagraphs(section.body, maxChars - section.trail.length, overlapChars)) {
-      texts.push(section.trail === '' ? piece : `${section.trail}\n\n${piece}`);
+    const trail = [root, section.trail].filter((part) => part !== '').join('\n');
+    for (const piece of packParagraphs(section.body, maxChars - trail.length, overlapChars)) {
+      texts.push(trail === '' ? piece : `${trail}\n\n${piece}`);
     }
   }
 

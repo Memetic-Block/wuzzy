@@ -89,6 +89,25 @@ describe('chunker', () => {
     for (const piece of chunks) expect(piece.text.trim()).not.toBe('');
   });
 
+  it('carries the document title into every chunk', () => {
+    // Readability lifts the h1 into the title, so a page often never states its
+    // own name in the indexed body. Without this a page cannot be found by name.
+    const chunks = chunk(`## Parameters\n\n${PARAGRAPH}\n\n## Returns\n\n${PARAGRAPH}\n`, {
+      title: 'eth_getLogs - Base Documentation',
+    });
+    expect(chunks.length).toBeGreaterThanOrEqual(2);
+    for (const piece of chunks) {
+      expect(piece.text).toContain('eth_getLogs');
+    }
+    // The section heading is still there underneath it.
+    expect(chunks.some((c) => c.text.includes('## Parameters'))).toBe(true);
+  });
+
+  it('omits the root heading when there is no title', () => {
+    const chunks = chunk(`## Parameters\n\n${PARAGRAPH}\n`, { title: null });
+    expect(chunks[0]!.text).toStartWith('## Parameters');
+  });
+
   it('does not treat a # inside a fenced block as a heading', () => {
     const chunks = chunk(`# Deploy\n\n${PARAGRAPH}\n\n\`\`\`bash\n# not a heading\ncast call\n\`\`\`\n`);
     expect(chunks.some((c) => c.text.includes('# not a heading'))).toBe(true);

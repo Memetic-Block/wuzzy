@@ -163,9 +163,15 @@ indexes it cannot model.
 | `fetch_log` | Append-only record of every fetch actually performed |
 | `chunks` | Embeddable slices with a `vector(1536)` column and an hnsw index |
 
-`/search` runs vector top-k over `chunks`, collapses to the best chunk per document, and joins
-back to `documents` so every result carries the provenance block a paying agent needs to check
-the claim itself.
+`/search` is hybrid: BM25 and vector similarity run independently over `chunks` and their
+rankings are fused with Reciprocal Rank Fusion, then collapsed to the best chunk per document
+and joined back to `documents` so every result carries the provenance block a paying agent
+needs to check the claim itself. `mode` in the request body, or `SEARCH_MODE`, selects
+`hybrid` (default), `vector` or `lexical`; `lexical` needs no embedding provider.
+
+The BM25 scoring is computed in SQL rather than taken from `ts_rank`, which is not BM25 and
+has neither an IDF term nor length normalisation. Each result reports the rank each arm gave
+it, which is what you want when tuning.
 
 Content changes clear `embedded_at` and `attestation_uid`, which is what makes the embed and
 attest passes idempotent.

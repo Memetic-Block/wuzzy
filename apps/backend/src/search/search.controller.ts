@@ -6,6 +6,8 @@ import { EmptyQueryError, SearchService } from './search.service';
 interface SearchBody {
   readonly query?: unknown;
   readonly topK?: unknown;
+  /** Optional override, mostly for tuning: hybrid, vector or lexical. */
+  readonly mode?: unknown;
 }
 
 const MAX_TOP_K = 50;
@@ -38,10 +40,13 @@ export class SearchController {
 
     const query = typeof body?.query === 'string' ? body.query : '';
     const topK = clampTopK(body?.topK);
+    const mode = ['hybrid', 'vector', 'lexical'].includes(String(body?.mode))
+      ? (String(body?.mode) as 'hybrid' | 'vector' | 'lexical')
+      : undefined;
 
     let results;
     try {
-      results = await this.search.search(query, topK);
+      results = await this.search.search(query, topK, mode);
     } catch (error) {
       if (error instanceof EmptyQueryError) {
         response.status(HttpStatus.BAD_REQUEST).json({ error: 'query must not be blank' });

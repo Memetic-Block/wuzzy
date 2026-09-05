@@ -133,6 +133,22 @@ bytes for a page that is not UTF-8 and would therefore corrupt the raw hash; and
 fetch is what makes the honest user-agent checkable on every request rather than on the ones a
 hook happens to cover. robots.txt and sitemaps are fetched the same way, then parsed.
 
+**Search is hybrid, and the ranking is ours.** BM25 and vector similarity run
+independently over `chunks` and their rankings are fused with Reciprocal Rank Fusion
+([search/fusion.ts](apps/backend/src/search/fusion.ts)). Postgres supplies tokenising,
+stemming and a GIN index, but `ts_rank`/`ts_rank_cd` are not BM25: they have no IDF term and
+no length normalisation, so the scoring is computed in SQL in
+[search/lexical.ts](apps/backend/src/search/lexical.ts) from a stored tsvector and token
+count. Fusion is by rank rather than score on purpose, because BM25 is an unbounded sum and
+cosine is bounded, and normalising between them would change meaning as the corpus grows.
+`SEARCH_MODE=lexical` needs no embedding provider at all.
+
+**Chunks carry the document title.** Readability deletes the `<h1>` from the article body
+because it duplicates `<title>`, so a page often never states its own name in the text that
+gets indexed: on a 60-page sample of docs.base.org that was true of 29 of them. The chunker
+therefore prepends the title as each chunk's root heading. Without it, a page cannot be found
+by its own name by either arm, which for a documentation corpus is most of what people type.
+
 **The meter mirrors the reference x402 middleware.**
 [payment/payment.service.ts](apps/backend/src/payment/payment.service.ts) follows the same
 sequence as `x402-express`: build requirements, 402 when the header is absent, malformed or

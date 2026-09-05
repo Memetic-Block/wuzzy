@@ -42,7 +42,7 @@ export async function embedPending(
 
   let chunksWritten = 0;
   for (const document of pending) {
-    const pieces = chunk(document.content);
+    const pieces = chunk(document.content, { title: document.title });
     if (pieces.length === 0) {
       // Nothing embeddable, but the document is still handled: leaving
       // embedded_at null would make it reappear on every future pass.
