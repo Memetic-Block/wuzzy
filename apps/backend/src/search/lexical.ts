@@ -8,6 +8,12 @@ import type { DataSource } from 'typeorm';
  * and length normalisation that make BM25 behave on a corpus of very uneven
  * page lengths.
  *
+ * The inverted index is Postgres's own: a GIN index over the stored `tsv`
+ * maps each lexeme to the chunks holding it, and the query is stemmed through
+ * the same `to_tsvector('english', ...)` the documents went through, so the
+ * lexemes on both sides are directly comparable. What is ours is the scoring
+ * and the corpus statistics underneath it.
+ *
  * The formula is the standard one:
  *
  *   score(q, d) = SUM over t in q of  IDF(t) * ( tf * (k1 + 1) )
@@ -73,12 +79,19 @@ export async function lexicalSearch(
       SELECT to_tsquery('simple', string_agg(quote_literal(lexeme), ' | ')) AS tsq
       FROM terms
     ),
-    corpus AS (
+    -- MATERIALIZED on both of these is load-bearing, not a hint. Postgres
+    -- inlines a CTE referenced only once, and inlining these pushes their
+    -- aggregates into the scoring expression, where they are re-evaluated once
+    -- per candidate row and once per mention: df appears twice in the score,
+    -- again in the sort and again in the filter, so a query matching ~1900
+    -- chunks ran the document-frequency count ~7800 times and took 3.7s
+    -- instead of 32ms. Computing them once is the whole point of the shape.
+    corpus AS MATERIALIZED (
       SELECT count(*)::float8 AS n, coalesce(avg(c.term_count), 0)::float8 AS avgdl
       FROM chunks c
       JOIN index_documents m ON m.document_id = c.document_id AND m.index_id = $5::uuid
     ),
-    document_frequency AS (
+    document_frequency AS MATERIALIZED (
       -- The membership join stays inside each scan rather than in a shared CTE:
       -- materialising the scoped chunk set once would read well but would cost
       -- the GIN index on every document-frequency probe.
