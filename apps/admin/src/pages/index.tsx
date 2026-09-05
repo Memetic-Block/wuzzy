@@ -5,14 +5,22 @@ export default () => (
   <Layout title="Wuzzy admin">
     <h1 class="text-2xl font-bold">Wuzzy index admin</h1>
     <p class="mt-1 text-sm text-gray-600">
-      Read-only view of the global index. There is one corpus: documents, their provenance
-      trail, and their chunks. This is a separate app from the public site and is not
-      reachable from it.
+      Read-only view of the store. There is one corpus and indexes are membership views over
+      it, so a page two indexes both want is crawled and attested once. This is a separate app
+      from the public site and is not reachable from it.
     </p>
 
     <p id="admin-error" class="mt-4 hidden rounded bg-red-50 px-3 py-2 text-sm text-red-800"></p>
 
     <section id="stats" class="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4"></section>
+
+    <section class="mt-8">
+      <div class="flex items-baseline justify-between">
+        <h2 class="text-lg font-semibold">Indexes</h2>
+        <span id="index-count" class="text-sm text-gray-600"></span>
+      </div>
+      <div id="indexes" class="mt-2 overflow-x-auto text-sm"></div>
+    </section>
 
     <section class="mt-8">
       <h2 class="text-lg font-semibold">Sources</h2>
@@ -30,6 +38,9 @@ export default () => (
           placeholder="filter by url or title"
           class="flex-1 rounded border border-gray-300 px-3 py-2 text-sm"
         />
+        <select id="doc-index" class="rounded border border-gray-300 px-3 py-2 text-sm">
+          <option value="">every index</option>
+        </select>
         <select id="doc-filter" class="rounded border border-gray-300 px-3 py-2 text-sm">
           <option value="all">all</option>
           <option value="unembedded">not embedded</option>

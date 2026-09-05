@@ -6,7 +6,9 @@ import { getDataSourceToken } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { DocumentEntity } from '../database/document.entity';
 import { FetchLogEntity } from '../database/fetch-log.entity';
-import { connectForTests, truncateWuzzyTables } from '../testing/database';
+import { IndexesService } from '../indexes/indexes.service';
+import { buildIndexesConfig } from '../indexes/index.config';
+import { connectForTests, globalIndexId, joinIndex, truncateWuzzyTables } from '../testing/database';
 import { ADMIN_CONFIG, buildAdminConfig, type AdminConfig } from './admin.config';
 import { AdminController } from './admin.controller';
 import { AdminGuard } from './admin.guard';
@@ -108,6 +110,44 @@ describe('admin API', () => {
     expect(stats.attested).toBe(1);
     expect(stats.hosts).toEqual([{ host: 'docs.base.org', documents: 4 }]);
     expect(stats.protocols[0]).toEqual({ protocol: 'wuzzy/crawl', protocolVersion: 1, documents: 4 });
+  });
+
+  it('lists indexes with the counts that say whether they are finished', async () => {
+    const source = ready();
+    if (!source) return;
+    await seed(source, 3);
+
+    const global = await globalIndexId(source);
+    const documents = await source.getRepository(DocumentEntity).find({ order: { url: 'ASC' } });
+    for (const document of documents) await joinIndex(source, global, document.id);
+
+    // A commissioned index sharing one of those documents, plus a URL it is
+    // still waiting on.
+    const commissioned = await new IndexesService(source, buildIndexesConfig({})).create({
+      owner: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      name: 'Commissioned',
+      urls: [documents[0]!.url, 'https://docs.base.org/not-yet'],
+    });
+
+    const url = await boot(source);
+    const rows = await (await fetch(`${url}/admin/indexes`)).json();
+
+    // Global first, whatever the creation order.
+    expect(rows.map((row: any) => row.slug)).toEqual(['global', 'commissioned']);
+    expect(rows[0]).toMatchObject({ pages: 3, pending: 0, status: 'ready', pageCap: null });
+    expect(rows[1]).toMatchObject({
+      id: commissioned.id,
+      owner: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      pages: 1,
+      pending: 1,
+      status: 'pending',
+    });
+
+    // Shared, not copied: the document counted by both is one row.
+    const scoped = await (await fetch(`${url}/admin/documents?index=commissioned`)).json();
+    expect(scoped.total).toBe(1);
+    expect(scoped.documents[0].url).toBe(documents[0]!.url);
+    expect((await (await fetch(`${url}/admin/documents`)).json()).total).toBe(3);
   });
 
   it('pages and filters documents', async () => {

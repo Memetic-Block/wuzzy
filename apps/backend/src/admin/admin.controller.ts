@@ -13,10 +13,16 @@ export class AdminController {
     return this.admin.stats();
   }
 
+  @Get('indexes')
+  indexes() {
+    return this.admin.indexes();
+  }
+
   @Get('documents')
   documents(
     @Query('q') query?: string,
     @Query('host') host?: string,
+    @Query('index') index?: string,
     @Query('filter') filter?: string,
     @Query('limit') limit?: string,
     @Query('offset') offset?: string,
@@ -24,6 +30,7 @@ export class AdminController {
     return this.admin.documents({
       query: query?.trim() || undefined,
       host: host?.trim() || undefined,
+      index: index?.trim() || undefined,
       filter: (['unembedded', 'unattested', 'attested'].includes(filter ?? '')
         ? filter
         : 'all') as DocumentFilter,

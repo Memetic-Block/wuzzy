@@ -1,7 +1,7 @@
 // Read-only admin view over the global index. Everything here is a GET; the
 // admin API never writes, so a mistake in this file cannot corrupt the corpus.
 (function () {
-  var state = { offset: 0, limit: 25, q: '', filter: 'all' };
+  var state = { offset: 0, limit: 25, q: '', filter: 'all', index: '' };
   var token = new URLSearchParams(location.search).get('token') || '';
 
   function esc(v) {
@@ -62,9 +62,62 @@
     });
   }
 
+  // Indexes are membership views over one store, so the counts here are what
+  // each index can see rather than anything it owns exclusively.
+  function loadIndexes() {
+    return api('/indexes').then(function (rows) {
+      el('index-count').textContent =
+        rows.length + (rows.length === 1 ? ' index' : ' indexes');
+
+      el('indexes').innerHTML = rows.length
+        ? '<table class="w-full text-left"><thead><tr class="border-b border-gray-300">' +
+          '<th class="py-1">Index</th><th class="py-1">Owner</th><th class="py-1">Access</th>' +
+          '<th class="py-1">Status</th><th class="py-1 text-right">Pages</th>' +
+          '<th class="py-1 text-right">Attested</th><th class="py-1 text-right">Pending</th>' +
+          '<th class="py-1">Created</th></tr></thead><tbody>' +
+          rows.map(function (i) {
+            var access = i.visibility + ' / ' + i.readPolicy +
+              (i.readPolicy === 'allowlist' ? ' (' + i.readers + ')' : '');
+            return '<tr class="cursor-pointer border-b border-gray-100 hover:bg-gray-50" ' +
+              'data-index="' + esc(i.slug) + '">' +
+              '<td class="py-1"><div>' + esc(i.name) + '</div>' +
+              '<div class="text-xs text-gray-500">' + esc(i.slug) + '</div></td>' +
+              '<td class="py-1 font-mono text-xs">' + short(i.owner) + '</td>' +
+              '<td class="py-1 text-xs">' + esc(access) + '</td>' +
+              '<td class="py-1 text-xs">' + esc(i.status) + '</td>' +
+              '<td class="py-1 text-right">' + i.pages +
+              (i.pageCap === null ? '' : '<span class="text-xs text-gray-500">/' + i.pageCap + '</span>') +
+              '</td>' +
+              '<td class="py-1 text-right">' + i.attested + '</td>' +
+              '<td class="py-1 text-right">' + i.pending + '</td>' +
+              '<td class="py-1 text-xs">' + when(i.createdAt) + '</td></tr>';
+          }).join('') + '</tbody></table>'
+        : '<p class="text-gray-600">No indexes.</p>';
+
+      var picker = el('doc-index');
+      picker.innerHTML = '<option value="">every index</option>' +
+        rows.map(function (i) {
+          return '<option value="' + esc(i.slug) + '">' + esc(i.name) + '</option>';
+        }).join('');
+      picker.value = state.index;
+
+      // Clicking a row filters the document list to that index, which is the
+      // only question this table makes anyone want to ask next.
+      Array.prototype.forEach.call(el('indexes').querySelectorAll('tr[data-index]'), function (row) {
+        row.addEventListener('click', function () {
+          state.index = row.getAttribute('data-index');
+          state.offset = 0;
+          picker.value = state.index;
+          loadDocuments().catch(fail);
+        });
+      });
+    });
+  }
+
   function loadDocuments() {
     var qs = '?limit=' + state.limit + '&offset=' + state.offset +
       '&filter=' + encodeURIComponent(state.filter) +
+      (state.index ? '&index=' + encodeURIComponent(state.index) : '') +
       (state.q ? '&q=' + encodeURIComponent(state.q) : '');
     return api('/documents' + qs).then(function (page) {
       el('doc-count').textContent =
@@ -155,6 +208,11 @@
     state.offset = 0;
     loadDocuments().catch(fail);
   });
+  el('doc-index').addEventListener('change', function (e) {
+    state.index = e.target.value;
+    state.offset = 0;
+    loadDocuments().catch(fail);
+  });
   el('prev').addEventListener('click', function () {
     state.offset = Math.max(0, state.offset - state.limit);
     loadDocuments().catch(fail);
@@ -164,5 +222,5 @@
     loadDocuments().catch(fail);
   });
 
-  Promise.all([loadStats(), loadDocuments(), loadActivity()]).catch(fail);
+  Promise.all([loadStats(), loadIndexes(), loadDocuments(), loadActivity()]).catch(fail);
 })();

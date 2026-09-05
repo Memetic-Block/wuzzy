@@ -39,6 +39,22 @@ export interface DocumentPage {
 
 export type DocumentFilter = 'all' | 'unembedded' | 'unattested' | 'attested';
 
+export interface IndexSummaryRow {
+  readonly id: string;
+  readonly slug: string;
+  readonly name: string;
+  readonly owner: string;
+  readonly visibility: string;
+  readonly readPolicy: string;
+  readonly pageCap: number | null;
+  readonly createdAt: string;
+  readonly status: 'pending' | 'crawling' | 'ready';
+  readonly pages: number;
+  readonly attested: number;
+  readonly pending: number;
+  readonly readers: number;
+}
+
 const MAX_LIMIT = 200;
 
 @Injectable()
@@ -59,8 +75,8 @@ export class AdminService {
         (SELECT max(fetched_at) FROM documents)                            AS last_fetched_at
     `);
 
-    // The index has no tenancy, so host is the closest thing to a natural
-    // grouping: which sites the corpus actually came from.
+    // Host grouping is a view over the whole store rather than over any one
+    // index: which sites the corpus actually came from.
     const hosts = await this.dataSource.query(`
       SELECT split_part(split_part(url, '://', 2), '/', 1) AS host, count(*)::int AS documents
       FROM documents GROUP BY host ORDER BY documents DESC, host ASC
@@ -85,9 +101,48 @@ export class AdminService {
     };
   }
 
+  /**
+   * Every index with the counts that say whether it is finished. Ordered with
+   * the global index first, because it is the one an unscoped search reads and
+   * the one an operator is usually looking at.
+   */
+  async indexes(): Promise<IndexSummaryRow[]> {
+    const rows = await this.dataSource.query(`
+      SELECT i.id, i.slug, i.name, i.owner, i.visibility,
+             i.read_policy AS "readPolicy", i.page_cap AS "pageCap", i.created_at,
+             (SELECT count(*) FROM index_documents m WHERE m.index_id = i.id)::int AS pages,
+             (SELECT count(*) FROM index_documents m JOIN documents d ON d.id = m.document_id
+               WHERE m.index_id = i.id AND d.attestation_uid IS NOT NULL)::int AS attested,
+             (SELECT count(*) FROM index_urls u
+               WHERE u.index_id = i.id AND u.crawled_at IS NULL)::int AS pending,
+             (SELECT count(*) FROM index_urls u
+               WHERE u.index_id = i.id AND u.crawled_at IS NOT NULL)::int AS crawled,
+             (SELECT count(*) FROM index_readers r WHERE r.index_id = i.id)::int AS readers
+      FROM indexes i
+      ORDER BY (i.slug = 'global') DESC, i.created_at DESC
+    `);
+
+    return rows.map((row: Record<string, any>) => ({
+      id: row.id,
+      slug: row.slug,
+      name: row.name,
+      owner: row.owner,
+      visibility: row.visibility,
+      readPolicy: row.readPolicy,
+      pageCap: row.pageCap === null ? null : Number(row.pageCap),
+      createdAt: new Date(row.created_at).toISOString(),
+      status: row.pending === 0 ? 'ready' : row.crawled > 0 ? 'crawling' : 'pending',
+      pages: row.pages,
+      attested: row.attested,
+      pending: row.pending,
+      readers: row.readers,
+    }));
+  }
+
   async documents(options: {
     query?: string;
     host?: string;
+    index?: string;
     filter?: DocumentFilter;
     limit?: number;
     offset?: number;
@@ -104,6 +159,14 @@ export class AdminService {
     if (options.host) {
       params.push(options.host);
       where.push(`split_part(split_part(d.url, '://', 2), '/', 1) = $${params.length}`);
+    }
+    if (options.index) {
+      params.push(options.index);
+      where.push(
+        `EXISTS (SELECT 1 FROM index_documents m JOIN indexes i ON i.id = m.index_id
+                  WHERE m.document_id = d.id AND (i.slug = $${params.length}
+                        OR i.id::text = $${params.length}))`,
+      );
     }
     if (options.filter === 'unembedded') where.push('d.embedded_at IS NULL');
     if (options.filter === 'unattested') where.push('d.attestation_uid IS NULL');
