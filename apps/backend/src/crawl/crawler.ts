@@ -12,11 +12,27 @@ export interface CrawlOptions {
   readonly seeds: readonly string[];
   readonly maxRequests?: number;
   readonly maxConcurrency?: number;
+  /**
+   * Minimum gap between two requests to the same host. Concurrency is global,
+   * so without this a run over several sites can still put every worker on one
+   * of them. Being welcome back matters more to this crawler than finishing
+   * quickly.
+   */
+  readonly minHostIntervalMs?: number;
+  /**
+   * Ceiling per host. A global cap alone starves any site that has no sitemap:
+   * it starts with one URL and has to discover the rest, by which time the
+   * sites that listed thousands up front have spent the budget.
+   */
+  readonly maxPerHost?: number;
   /** Injected by tests; production uses the honest fetcher. */
   readonly fetcher?: Fetcher;
 }
 
 export type CrawlSummary = Record<FetchOutcome | 'failed', number>;
+
+/** One request per host per this many ms, by default. */
+export const DEFAULT_MIN_HOST_INTERVAL_MS = 250;
 
 const HTML_LIKE = /^(text\/html|application\/xhtml\+xml)/i;
 const MARKDOWN_LIKE = /^(text\/markdown|text\/x-markdown)/i;
@@ -40,7 +56,10 @@ export async function crawl(dataSource: DataSource, options: CrawlOptions): Prom
   // that fetches robots.
   const scopeGuard = async (url: string): Promise<boolean> => inScope(url);
   const fetcher = options.fetcher ?? createFetcher(agent);
-  const pageFetcher = options.fetcher ?? createFetcher(agent, scopeGuard);
+  const pageFetcher = politely(
+    options.fetcher ?? createFetcher(agent, scopeGuard),
+    options.minHostIntervalMs ?? DEFAULT_MIN_HOST_INTERVAL_MS,
+  );
 
   const policies = new Map<string, RobotsPolicy>();
   const policyFor = async (url: string): Promise<RobotsPolicy> => {
@@ -56,6 +75,12 @@ export async function crawl(dataSource: DataSource, options: CrawlOptions): Prom
   // Seed hosts bound the crawl: a link off-host is not followed, and neither is
   // a sitemap entry that points somewhere else.
   const allowedHosts = new Set(options.seeds.map((seed) => new URL(seed).host));
+
+  // Budget is spent at approval rather than at fetch, so that a host cannot
+  // have thousands of URLs approved before any of them come back. Approvals are
+  // remembered because the same URL can be offered from several pages.
+  const approved = new Set<string>();
+  const perHost = new Map<string, number>();
   const inScope = async (url: string): Promise<boolean> => {
     let parsed: URL;
     try {
@@ -65,7 +90,15 @@ export async function crawl(dataSource: DataSource, options: CrawlOptions): Prom
     }
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
     if (!allowedHosts.has(parsed.host)) return false;
-    return (await policyFor(url)).isAllowed(url);
+    if (!(await policyFor(url)).isAllowed(url)) return false;
+
+    if (options.maxPerHost === undefined) return true;
+    if (approved.has(url)) return true;
+    const used = perHost.get(parsed.host) ?? 0;
+    if (used >= options.maxPerHost) return false;
+    perHost.set(parsed.host, used + 1);
+    approved.add(url);
+    return true;
   };
 
   const crawler = new BasicCrawler(
@@ -144,7 +177,35 @@ async function discoverSeeds(
   for (const candidate of candidates) {
     if (await inScope(candidate)) allowed.push(candidate);
   }
-  return allowed;
+  return interleaveByHost(allowed);
+}
+
+/**
+ * Round-robins the queue across hosts.
+ *
+ * Sitemaps are collected seed by seed, so in seed order one large site can
+ * supply more URLs than the whole run is allowed to fetch and every later host
+ * gets nothing. Interleaving makes a capped crawl a sample of all the seeds
+ * rather than an exhaustive crawl of the first one or two.
+ */
+export function interleaveByHost(urls: readonly string[]): string[] {
+  const byHost = new Map<string, string[]>();
+  for (const url of urls) {
+    const { host } = new URL(url);
+    const bucket = byHost.get(host);
+    if (bucket) bucket.push(url);
+    else byHost.set(host, [url]);
+  }
+
+  const buckets = [...byHost.values()];
+  const interleaved: string[] = [];
+  for (let index = 0; interleaved.length < urls.length; index += 1) {
+    for (const bucket of buckets) {
+      const url = bucket[index];
+      if (url !== undefined) interleaved.push(url);
+    }
+  }
+  return interleaved;
 }
 
 async function discoverLinks(
@@ -172,4 +233,25 @@ async function discoverLinks(
     if (await inScope(href)) allowed.push(href);
   }
   return allowed;
+}
+
+/**
+ * Serialises requests per host and spaces them out. Crawlee's concurrency limit
+ * is global, so a multi-site crawl can otherwise aim every worker at whichever
+ * host happens to have the most queued URLs.
+ */
+export function politely(fetcher: Fetcher, minIntervalMs: number): Fetcher {
+  if (minIntervalMs <= 0) return fetcher;
+  const turns = new Map<string, Promise<unknown>>();
+
+  return async (url: string) => {
+    const { host } = new URL(url);
+    const previous = turns.get(host) ?? Promise.resolve();
+    const mine = previous
+      .catch(() => undefined)
+      .then(() => new Promise((resolve) => setTimeout(resolve, minIntervalMs)));
+    turns.set(host, mine);
+    await mine;
+    return fetcher(url);
+  };
 }

@@ -73,6 +73,8 @@ ENV NODE_ENV=production
 
 COPY --from=smoke /app/node_modules ./node_modules
 COPY package.json bun.lock tsconfig.json tsconfig.base.json ./
+# The curated crawl seeds ship with the image so `wuzzy crawl` needs no arguments.
+COPY seeds.json ./
 COPY apps/backend/package.json ./apps/backend/
 COPY apps/backend ./apps/backend
 

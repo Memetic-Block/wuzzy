@@ -10,14 +10,17 @@ import 'reflect-metadata';
 import { DataSource } from 'typeorm';
 import { buildDataSourceOptions } from '../database/typeorm.config';
 import { crawl } from '../crawl/crawler';
+import { readSeeds } from '../crawl/seeds';
 import { embedPending } from '../embed/embed';
 import { attestPending, createEasSubmitter, MissingAttesterKeyError } from '../attest/attestor';
 import { formatVerifyResult, verify } from '../verify/verify';
 
 const USAGE = `wuzzy - provable crawl pipeline
 
-  wuzzy crawl <seed-url>...   crawl seeds and write the provenance trail
-                              --max=<n> caps pages fetched, for a trial run
+  wuzzy crawl [seed-url]...   crawl seeds and write the provenance trail
+                              with no URLs, reads seeds.json
+                              --max=<n> caps pages fetched in total
+                              --per-host=<n> caps pages fetched from each host
   wuzzy embed                 embed every document the crawler left pending
   wuzzy attest                attest every embedded document that has no UID yet
   wuzzy verify <url>          re-derive the hash for one indexed URL
@@ -38,17 +41,25 @@ async function main(argv: readonly string[]): Promise<number> {
     switch (command) {
       case 'crawl': {
         const maxFlag = args.find((arg) => arg.startsWith('--max='));
-        const seeds = args.filter((arg) => !arg.startsWith('--'));
-        if (seeds.length === 0) {
-          console.error('crawl needs at least one seed URL');
-          return 1;
+        const given = args.filter((arg) => !arg.startsWith('--'));
+        // No URLs means the curated list, so a real crawl is reproducible
+        // without anyone having to remember what it was built from.
+        const seeds = given.length > 0 ? given : await readSeeds();
+        if (given.length === 0) {
+          console.log(`seeds.json: ${seeds.length} host(s)`);
         }
         const maxRequests = maxFlag ? Number(maxFlag.slice('--max='.length)) : undefined;
         if (maxRequests !== undefined && (!Number.isFinite(maxRequests) || maxRequests < 1)) {
           console.error('--max must be a positive number');
           return 1;
         }
-        const summary = await crawl(dataSource, { seeds, maxRequests });
+        const perHostFlag = args.find((arg) => arg.startsWith('--per-host='));
+        const maxPerHost = perHostFlag ? Number(perHostFlag.slice('--per-host='.length)) : undefined;
+        if (maxPerHost !== undefined && (!Number.isFinite(maxPerHost) || maxPerHost < 1)) {
+          console.error('--per-host must be a positive number');
+          return 1;
+        }
+        const summary = await crawl(dataSource, { seeds, maxRequests, maxPerHost });
         console.log(
           `created ${summary.created}  changed ${summary.changed}  ` +
             `unchanged ${summary.unchanged}  skipped ${summary.skipped}  failed ${summary.failed}`,

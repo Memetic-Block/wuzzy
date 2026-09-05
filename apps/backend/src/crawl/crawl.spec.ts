@@ -7,7 +7,7 @@ import { FetchLogEntity } from '../database/fetch-log.entity';
 import { buildDataSourceOptions } from '../database/typeorm.config';
 import { truncateWuzzyTables } from '../testing/database';
 import { scenario } from '../testing/scenario';
-import { crawl } from './crawler';
+import { crawl, interleaveByHost } from './crawler';
 import { PROSE, page, startMockSite, type MockSite } from './mock-site';
 
 // Crawlee narrates every run at INFO, which buries the test output.
@@ -51,6 +51,43 @@ const site = async (pages: Record<string, string>): Promise<MockSite> => {
 };
 
 const ROBOTS_ALLOW_ALL = 'User-agent: *\nAllow: /\n';
+
+describe('seed ordering', () => {
+  it('round-robins hosts so a capped crawl samples all of them', () => {
+    const interleaved = interleaveByHost([
+      'https://a.test/1', 'https://a.test/2', 'https://a.test/3',
+      'https://b.test/1',
+      'https://c.test/1', 'https://c.test/2',
+    ]);
+
+    // A cap of 3 must reach all three hosts, not exhaust the first.
+    expect(interleaved.slice(0, 3).map((url) => new URL(url).host)).toEqual([
+      'a.test', 'b.test', 'c.test',
+    ]);
+    expect(interleaved).toHaveLength(6);
+    expect(new Set(interleaved).size).toBe(6);
+  });
+});
+
+describe('per-host budget', () => {
+  it('stops one host from spending the whole crawl', async () => {
+    const source = db();
+    if (!source) return;
+
+    // A site with many pages, linked from its own index.
+    const many: Record<string, string> = { '/robots.txt': ROBOTS_ALLOW_ALL };
+    const links = Array.from({ length: 10 }, (_, i) => `/page-${i}`);
+    many['/'] = page('Index', PROSE, links);
+    for (const path of links) many[path] = page(`Page ${path}`, PROSE);
+    const big = await site(many);
+
+    await crawl(source, { seeds: [`${big.origin}/`], maxPerHost: 4, maxRequests: 50 });
+
+    const documents = await source.getRepository(DocumentEntity).find();
+    expect(documents.length).toBeLessThanOrEqual(4);
+    expect(documents.length).toBeGreaterThan(0);
+  });
+});
 
 describe('crawl provenance lifecycle', () => {
   scenario('fresh fetch produces document and provenance rows', async () => {

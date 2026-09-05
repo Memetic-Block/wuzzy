@@ -1,0 +1,13 @@
+{
+  "_comment": "Crawl seeds. Scope is the exact host of each entry, so a subdomain needs its own line. Every one of these was checked to allow WuzzyBot before being added.",
+  "seeds": [
+    { "url": "https://docs.base.org/", "note": "Base chain, agents and API reference" },
+    { "url": "https://docs.cdp.coinbase.com/", "note": "Coinbase Developer Platform, including x402" },
+    { "url": "https://docs.attest.org/", "note": "EAS: the attestation layer wuzzy writes to" },
+    { "url": "https://docs.optimism.io/", "note": "OP Stack, which Base is built on" },
+    { "url": "https://viem.sh/", "note": "TypeScript interface to Ethereum" },
+    { "url": "https://wagmi.sh/", "note": "React hooks for Ethereum" },
+    { "url": "https://docs.farcaster.xyz/", "note": "Farcaster protocol" },
+    { "url": "https://docs.zora.co/", "note": "Zora protocol" }
+  ]
+}

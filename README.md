@@ -44,7 +44,9 @@ Stages are CLI commands, not queue workers, so a run is something you start, wat
 re-run idempotently.
 
 ```sh
-bun run wuzzy crawl https://docs.base.org   # fetch, canonicalize, write provenance
+bun run wuzzy crawl                         # crawl seeds.json
+bun run wuzzy crawl --per-host=250          # cap each host, for a sample
+bun run wuzzy crawl https://docs.base.org   # or name hosts explicitly
 bun run wuzzy embed                         # chunk and embed whatever is pending
 bun run wuzzy attest                        # multiAttest anything without a UID
 bun run wuzzy verify <url>                  # re-derive the hash for one indexed URL
@@ -52,6 +54,16 @@ bun run wuzzy verify <url>                  # re-derive the hash for one indexed
 
 `verify` exits 0 on a match, 1 on a mismatch, and 2 when the URL is not indexed, so it drops
 straight into a script.
+
+[seeds.json](seeds.json) is the curated seed list, kept as data so what the index is built
+from is reviewable rather than remembered. Scope is the exact host of each entry, so a
+subdomain needs its own line.
+
+Two knobs matter on a multi-host crawl. `--per-host` caps each site rather than the run:
+without it a site that lists thousands of URLs in a sitemap spends the whole budget before a
+site with no sitemap has discovered its second page. And requests to any one host are spaced
+by `minHostIntervalMs` (250ms by default) because concurrency is global, so a run over
+several sites can otherwise put every worker on one of them.
 
 Each stage is restartable because its work queue is a query rather than external state.
 `embed` picks up documents with a null `embedded_at` and `attest` picks up those with a null
