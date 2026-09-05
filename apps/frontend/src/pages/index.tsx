@@ -37,6 +37,22 @@ export default () => (
     <p id="status" class="mt-3 text-sm text-gray-600"></p>
     <div id="results" class="mt-6"></div>
 
+    <div id="pager" class="mt-6 flex items-center gap-2" hidden>
+      <button
+        id="prev"
+        class="cursor-pointer rounded border border-gray-300 px-3 py-1 text-sm hover:bg-gray-100 disabled:cursor-default disabled:opacity-40"
+      >
+        Previous
+      </button>
+      <button
+        id="next"
+        class="cursor-pointer rounded border border-gray-300 px-3 py-1 text-sm hover:bg-gray-100 disabled:cursor-default disabled:opacity-40"
+      >
+        Next
+      </button>
+      <span id="page-of" class="text-sm text-gray-600"></span>
+    </div>
+
     <p class="mt-12 border-t border-gray-200 pt-4 text-sm text-gray-600">
       Every result carries the hash of the exact content that was indexed, produced by a
       pinned public procedure. Third parties can re-derive it and check the attestation

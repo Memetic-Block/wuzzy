@@ -8,7 +8,13 @@ export interface SearchConfig {
   readonly rrfK: number;
   readonly k1: number;
   readonly b: number;
-  /** Candidates each arm contributes before fusion. */
+  /**
+   * How deep each arm goes, per query. Fixed, and deliberately independent of
+   * which page is being served: deepening an arm changes which arms contribute
+   * to a chunk's fused score, so a depth that grew with the offset would
+   * reorder earlier pages under the reader. This is the retrieval window, and
+   * paging is bounded by the documents it yields.
+   */
   readonly candidates: number;
   /**
    * Scoped chunk count at or below which the vector arm scans exhaustively
@@ -31,8 +37,9 @@ export function buildSearchConfig(
     k1: Number(env.SEARCH_BM25_K1 ?? DEFAULT_K1),
     b: Number(env.SEARCH_BM25_B ?? DEFAULT_B),
     // Deeper than topK so fusion has something to reorder: a document ranked
-    // 30th lexically and 3rd by vector should be able to surface.
-    candidates: Number(env.SEARCH_CANDIDATES ?? 50),
+    // 30th lexically and 3rd by vector should be able to surface. Deep enough,
+    // too, that there are several pages to walk before the window runs out.
+    candidates: Number(env.SEARCH_CANDIDATES ?? 200),
     // Well above the index page cap and below the size at which a sequential
     // scan of embeddings stops being cheap.
     exactScanChunks: Number(env.SEARCH_EXACT_SCAN_CHUNKS ?? 20000),

@@ -31,9 +31,28 @@ export class EmptyQueryError extends Error {}
 
 export interface SearchOptions {
   readonly topK?: number;
+  /**
+   * Documents to skip. Every page of a query is served from the same fixed
+   * retrieval window, so pages cannot overlap or shift under the reader.
+   */
+  readonly offset?: number;
   readonly mode?: SearchMode;
   /** The index to search. Callers resolve an absent one to the global index. */
   readonly scope: Scope;
+}
+
+export interface SearchPage {
+  readonly results: SearchResult[];
+  readonly offset: number;
+  readonly topK: number;
+  /**
+   * Documents found within the retrieval window. When `exhaustive` is false
+   * this is a floor rather than a count: the arms were cut off at the window,
+   * so the corpus may hold more.
+   */
+  readonly total: number;
+  readonly exhaustive: boolean;
+  readonly hasMore: boolean;
 }
 
 export const EMBEDDER = Symbol('EMBEDDER');
@@ -80,14 +99,21 @@ export class SearchService {
    * Running both and fusing by rank costs one extra index and keeps each one's
    * strength.
    */
-  async search(query: string, options: SearchOptions): Promise<SearchResult[]> {
+  async search(query: string, options: SearchOptions): Promise<SearchPage> {
     const trimmed = query.trim();
     if (trimmed === '') throw new EmptyQueryError('query must not be blank');
 
     const { scope } = options;
     const topK = options.topK ?? 10;
+    const offset = Math.max(options.offset ?? 0, 0);
     const effectiveMode = options.mode ?? this.config.mode;
-    const depth = Math.max(this.config.candidates, topK);
+
+    // The retrieval window, and pointedly not a function of `offset`. Asking
+    // an arm for more does not merely append worse matches: a chunk ranked
+    // just outside one arm's window contributes nothing to its fused score
+    // until the window reaches it, at which point it can move up and reorder
+    // pages the reader has already seen. Fixed depth, consistent paging.
+    const depth = this.config.candidates;
 
     const [lexical, vector] = await Promise.all([
       effectiveMode === 'vector'
@@ -95,6 +121,11 @@ export class SearchService {
         : lexicalSearch(this.dataSource, trimmed, depth, scope, this.config),
       effectiveMode === 'lexical' ? [] : this.vectorSearch(trimmed, depth, scope),
     ]);
+
+    // An arm that returned everything it was asked for probably has more, so
+    // the totals below are a floor. An arm that came back short has been seen
+    // to the end.
+    const exhaustive = lexical.length < depth && vector.length < depth;
 
     // Fuse on chunk, not document: the same page can match one query lexically
     // in one passage and semantically in another, and collapsing too early
@@ -104,25 +135,47 @@ export class SearchService {
       (hit) => hit.chunkId as string,
       { k: this.config.rrfK },
     );
-    if (fused.length === 0) return [];
 
-    const chunkIds = fused.slice(0, depth).map((item) => item.key);
+    // Collapse to one entry per document, keeping its best-fused chunk. Done
+    // on document ids the arms already returned, so counting the whole result
+    // set costs nothing and only the page being served is looked up.
+    const documentOf = new Map<string, string>();
+    for (const hit of [...lexical, ...vector]) documentOf.set(hit.chunkId, hit.documentId);
+
+    const documents: { chunkId: string; score: number; ranks: Record<string, number> }[] = [];
+    const seen = new Set<string>();
+    for (const item of fused) {
+      const documentId = documentOf.get(item.key);
+      if (documentId === undefined || seen.has(documentId)) continue;
+      seen.add(documentId);
+      documents.push({ chunkId: item.key, score: item.score, ranks: item.ranks });
+    }
+
+    const page = documents.slice(offset, offset + topK);
+    const hasMore = offset + page.length < documents.length || !exhaustive;
+    const empty = {
+      results: [],
+      offset,
+      topK,
+      total: documents.length,
+      exhaustive,
+      hasMore: false,
+    };
+    if (page.length === 0) return { ...empty, hasMore: !exhaustive && documents.length > 0 };
+
     const rows: ChunkRow[] = await this.dataSource.query(
       `SELECT c.id AS chunk_id, d.url, d.title, c.text AS snippet, d.content_hash,
               d.fetched_at, d.attestation_uid, d.protocol, d.protocol_version
        FROM chunks c JOIN documents d ON d.id = c.document_id
        WHERE c.id = ANY($1::uuid[])`,
-      [chunkIds],
+      [page.map((item) => item.chunkId)],
     );
     const byChunk = new Map(rows.map((row) => [row.chunk_id, row]));
 
-    // One result per document, keeping its best-fused chunk as the snippet.
     const results: SearchResult[] = [];
-    const seen = new Set<string>();
-    for (const item of fused) {
-      const row = byChunk.get(item.key);
-      if (!row || seen.has(row.url)) continue;
-      seen.add(row.url);
+    for (const item of page) {
+      const row = byChunk.get(item.chunkId);
+      if (!row) continue;
       results.push({
         url: row.url,
         title: row.title,
@@ -138,9 +191,9 @@ export class SearchService {
           attestationUrl: attestationUrl(row.attestation_uid),
         },
       });
-      if (results.length >= topK) break;
     }
-    return results;
+
+    return { results, offset, topK, total: documents.length, exhaustive, hasMore };
   }
 
   /**

@@ -7,7 +7,7 @@ import { connectForTests, globalIndexId, joinIndex, truncateWuzzyTables } from '
 import { toVectorLiteral, type Embedder } from '../embed/embedder';
 import { reciprocalRankFusion } from './fusion';
 import { lexicalSearch } from './lexical';
-import { buildSearchConfig } from './search.config';
+import { buildSearchConfig, type SearchConfig } from './search.config';
 import { SearchService } from './search.service';
 
 const DIMENSIONS = 1536;
@@ -190,8 +190,8 @@ describe('hybrid search', () => {
 
     const service = new SearchService(source, embedder, buildSearchConfig({}));
 
-    const vectorOnly = await service.search('eth_getLogs', { topK: 10, mode: 'vector', scope });
-    const hybrid = await service.search('eth_getLogs', { topK: 10, mode: 'hybrid', scope });
+    const vectorOnly = (await service.search('eth_getLogs', { topK: 10, mode: 'vector', scope })).results;
+    const hybrid = (await service.search('eth_getLogs', { topK: 10, mode: 'hybrid', scope })).results;
 
     // The vector arm cannot tell the two apart on this query; BM25 can.
     expect(hybrid[0]!.url).toBe('https://x.test/getlogs');
@@ -215,7 +215,7 @@ describe('hybrid search', () => {
     };
 
     const service = new SearchService(source, embedder, buildSearchConfig({}));
-    const results = await service.search('paymaster', { topK: 10, mode: 'lexical', scope });
+    const results = (await service.search('paymaster', { topK: 10, mode: 'lexical', scope })).results;
 
     expect(results).toHaveLength(1);
     // Search still works with no embedding provider configured.
@@ -229,7 +229,7 @@ describe('hybrid search', () => {
     await addChunk(source, 'https://x.test/page', 'a second passage about the paymaster', oneHot(0));
 
     const service = new SearchService(source, topicEmbedder({ paymaster: 0 }), buildSearchConfig({}));
-    const results = await service.search('paymaster', { topK: 10, scope });
+    const results = (await service.search('paymaster', { topK: 10, scope })).results;
 
     expect(results).toHaveLength(1);
     expect(results[0]!.url).toBe('https://x.test/page');
@@ -248,3 +248,124 @@ function oneHot(slot: number): number[] {
   vector[slot] = 1;
   return vector;
 }
+
+describe('paging', () => {
+  const service = (source: DataSource, overrides: Partial<SearchConfig> = {}) =>
+    new SearchService(source, topicEmbedder({}), { ...buildSearchConfig({}), ...overrides });
+
+  /** Twelve documents that all match, so paging has something to divide. */
+  async function seedPages(source: DataSource) {
+    for (let index = 0; index < 12; index += 1) {
+      await addChunk(
+        source,
+        `https://x.test/page-${index}`,
+        `paymaster documentation section ${index} about sponsoring gas`,
+      );
+    }
+  }
+
+  /**
+   * Twelve documents the two arms rank in opposite orders: term frequency
+   * falls as the index rises, and cosine similarity rises with it. That
+   * disagreement is what makes the retrieval window observable, because a
+   * document only contributes an arm's rank once the window reaches it.
+   */
+  async function seedOpposedArms(source: DataSource) {
+    for (let index = 0; index < 12; index += 1) {
+      const embedding = new Array<number>(DIMENSIONS).fill(0);
+      embedding[0] = 1;
+      embedding[1] = (11 - index) / 12;
+      await addChunk(
+        source,
+        `https://opposed.test/page-${index}`,
+        `${Array(12 - index).fill('paymaster').join(' ')} section ${index}`,
+        embedding,
+      );
+    }
+  }
+
+  /** Answers every query with the vector that ranks the seeds above in order. */
+  const queryEmbedder = (): Embedder => ({
+    model: 'query-stub',
+    dimensions: DIMENSIONS,
+    embed: async (texts) =>
+      texts.map(() => {
+        const vector = new Array<number>(DIMENSIONS).fill(0);
+        vector[0] = 1;
+        return vector;
+      }),
+  });
+
+  it('divides results into pages that neither overlap nor drop anything', async () => {
+    const source = ready();
+    if (!source) return;
+    await seedPages(source);
+
+    const first = await service(source).search('paymaster', { topK: 5, scope });
+    const second = await service(source).search('paymaster', { topK: 5, offset: 5, scope });
+    const third = await service(source).search('paymaster', { topK: 5, offset: 10, scope });
+
+    expect(first.results).toHaveLength(5);
+    expect(second.results).toHaveLength(5);
+    expect(third.results).toHaveLength(2);
+
+    expect(first.total).toBe(12);
+    expect(first.hasMore).toBe(true);
+    expect(third.hasMore).toBe(false);
+
+    // Every document appears exactly once across the three pages.
+    const urls = [...first.results, ...second.results, ...third.results].map((r) => r.url);
+    expect(new Set(urls).size).toBe(12);
+  });
+
+  it('serves every page from one window, so paging matches a single big page', async () => {
+    const source = ready();
+    if (!source) return;
+    await seedOpposedArms(source);
+
+    // The property that makes paging trustworthy: walking it must produce
+    // exactly what asking for everything at once produces. A window narrower
+    // than the result set is the case that breaks if retrieval depth is ever
+    // allowed to grow with the offset.
+    const searcher = new SearchService(source, queryEmbedder(), {
+      ...buildSearchConfig({}),
+      candidates: 6,
+    });
+
+    const whole = await searcher.search('paymaster', { topK: 12, scope });
+    const walked: string[] = [];
+    for (let offset = 0; offset < whole.total; offset += 4) {
+      const page = await searcher.search('paymaster', { topK: 4, offset, scope });
+      walked.push(...page.results.map((result) => result.url));
+    }
+
+    expect(whole.results.length).toBeGreaterThan(4);
+    expect(walked).toEqual(whole.results.map((result) => result.url));
+  });
+
+  it('reports a floor rather than a count when the arms hit the ceiling', async () => {
+    const source = ready();
+    if (!source) return;
+    await seedPages(source);
+
+    // A window below the number of matches: the arms come back full, so the
+    // total cannot be claimed as exact.
+    const capped = service(source, { candidates: 3 });
+    const page = await capped.search('paymaster', { topK: 2, scope });
+
+    expect(page.exhaustive).toBe(false);
+    expect(page.hasMore).toBe(true);
+    expect(page.total).toBeLessThan(12);
+  });
+
+  it('serves an empty page past the end without claiming there is more', async () => {
+    const source = ready();
+    if (!source) return;
+    await seedPages(source);
+
+    const past = await service(source).search('paymaster', { topK: 5, offset: 500, scope });
+    expect(past.results).toHaveLength(0);
+    expect(past.total).toBe(12);
+    expect(past.hasMore).toBe(false);
+  });
+});

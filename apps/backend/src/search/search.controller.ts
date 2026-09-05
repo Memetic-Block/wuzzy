@@ -7,6 +7,8 @@ import { EmptyQueryError, SearchService } from './search.service';
 interface SearchBody {
   readonly query?: unknown;
   readonly topK?: unknown;
+  /** Documents to skip, for paging. */
+  readonly offset?: unknown;
   /** Optional override, mostly for tuning: hybrid, vector or lexical. */
   readonly mode?: unknown;
   /** Index id or slug. Absent means the global index. */
@@ -63,13 +65,14 @@ export class SearchController {
 
     const query = typeof body?.query === 'string' ? body.query : '';
     const topK = clampTopK(body?.topK);
+    const offset = clampOffset(body?.offset);
     const mode = ['hybrid', 'vector', 'lexical'].includes(String(body?.mode))
       ? (String(body?.mode) as 'hybrid' | 'vector' | 'lexical')
       : undefined;
 
-    let results;
+    let page;
     try {
-      results = await this.search.search(query, { topK, mode, scope: { indexId: index.id } });
+      page = await this.search.search(query, { topK, offset, mode, scope: { indexId: index.id } });
     } catch (error) {
       if (error instanceof EmptyQueryError) {
         response.status(HttpStatus.BAD_REQUEST).json({ error: 'query must not be blank' });
@@ -83,7 +86,18 @@ export class SearchController {
       if (header) response.setHeader('X-PAYMENT-RESPONSE', header);
     }
 
-    response.status(HttpStatus.OK).json({ query, index: index.slug, results });
+    response.status(HttpStatus.OK).json({
+      query,
+      index: index.slug,
+      offset: page.offset,
+      topK: page.topK,
+      total: page.total,
+      // total is a floor when the arms were cut off at the retrieval ceiling,
+      // so a client should render "200+" rather than claim a corpus-wide count.
+      exhaustive: page.exhaustive,
+      hasMore: page.hasMore,
+      results: page.results,
+    });
   }
 }
 
@@ -91,4 +105,10 @@ function clampTopK(value: unknown): number {
   const requested = typeof value === 'number' ? value : Number(value);
   if (!Number.isFinite(requested) || requested < 1) return 10;
   return Math.min(Math.floor(requested), MAX_TOP_K);
+}
+
+function clampOffset(value: unknown): number {
+  const requested = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(requested) || requested < 0) return 0;
+  return Math.floor(requested);
 }
