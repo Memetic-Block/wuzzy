@@ -16,8 +16,13 @@ describe('admin static build', () => {
     // An operator tool must not be indexable.
     expect(index).toContain('noindex');
 
-    expect(await Bun.file(join(distDir, 'admin.js')).exists()).toBe(true);
-    expect(await Bun.file(join(distDir, 'styles.css')).exists()).toBe(true);
+    // Content-addressed, and every reference resolves.
+    const assets = [...index.matchAll(/(?:src|href)="(\/[^"]+\.(?:js|css))"/g)].map((m) => m[1]!);
+    expect(assets).toEqual(expect.arrayContaining([expect.stringMatching(/^\/admin\.[0-9a-f]{8}\.js$/)]));
+    expect(assets).toEqual(expect.arrayContaining([expect.stringMatching(/^\/styles\.[0-9a-f]{8}\.css$/)]));
+    for (const asset of assets) {
+      expect(await Bun.file(join(distDir, asset)).exists()).toBe(true);
+    }
   });
 
   it('is served on its own origin, proxying only the admin API', async () => {
@@ -27,5 +32,9 @@ describe('admin static build', () => {
     expect(nginx).toContain('location /api/admin/');
     expect(nginx).not.toContain('location /api/ {');
     expect(nginx).toContain('noindex');
+
+    // An operator tool caches nothing, so its stale-asset risk is zero and it
+    // does not need the public site's long-lived immutable caching.
+    expect(nginx).toContain('no-store');
   });
 });

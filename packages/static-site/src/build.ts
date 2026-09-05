@@ -5,7 +5,7 @@
 // around this and the two cannot drift apart.
 
 import { Glob } from 'bun';
-import { watch } from 'node:fs';
+import { existsSync, watch } from 'node:fs';
 import { cp, mkdir, rm } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
@@ -53,7 +53,52 @@ export function createSite(options: SiteOptions): Site {
 
     await cp(publicDir, distDir, { recursive: true });
     await buildStyles();
+    await fingerprintAssets(written);
     return written;
+  }
+
+  /**
+   * Content-addresses every js and css file and rewrites the pages to match.
+   *
+   * Assets are served with a long max-age, so a stable filename means a
+   * returning browser keeps running yesterday's script for as long as its
+   * cache says it may, and a shipped fix is invisible until then. The hash is
+   * the cache key: changed content is a different URL, unchanged content stays
+   * cached, and no deploy has to guess how long to wait.
+   */
+  async function fingerprintAssets(pages: readonly string[]): Promise<void> {
+    const renamed = new Map<string, string>();
+    for await (const file of new Glob('**/*.{js,css}').scan(distDir)) {
+      const bytes = await Bun.file(join(distDir, file)).arrayBuffer();
+      const hash = new Bun.CryptoHasher('sha256').update(bytes).digest('hex').slice(0, 8);
+      const dot = file.lastIndexOf('.');
+      const hashed = `${file.slice(0, dot)}.${hash}${file.slice(dot)}`;
+
+      await Bun.write(join(distDir, hashed), bytes);
+      await rm(join(distDir, file));
+      renamed.set(`/${file}`, `/${hashed}`);
+    }
+
+    for (const page of pages) {
+      let html = await Bun.file(page).text();
+      for (const [from, to] of renamed) html = html.replaceAll(`="${from}"`, `="${to}"`);
+      await Bun.write(page, html);
+      assertEveryAssetResolves(html, page);
+    }
+  }
+
+  /**
+   * The originals are gone once they are hashed, so a reference the rewrite
+   * missed is a 404 rather than a stale file. Catching it here makes that a
+   * build failure instead of a broken page.
+   */
+  function assertEveryAssetResolves(html: string, page: string): void {
+    for (const match of html.matchAll(/(?:src|href)="(\/[^"]+\.(?:js|css))"/g)) {
+      const referenced = match[1]!;
+      if (!existsSync(join(distDir, referenced))) {
+        throw new Error(`${page} references ${referenced}, which the build did not produce`);
+      }
+    }
   }
 
   // Compiles src/styles.css with Tailwind. Run from the app directory so
