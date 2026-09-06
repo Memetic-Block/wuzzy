@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Estimating gas for a user operation</title>
+<body>
+<main>
+<article>
+<h1>Estimating gas for a user operation</h1>
+<p>A bundler quotes three limits for every user operation: verification gas, call gas, and
+pre-verification gas. <b>Underquoting any of them <i>drops the operation</b> from the mempool</i>
+rather than reverting it on chain, so the account never learns what happened.
+<p>Estimate against the same bundler you intend to submit to. Two bundlers can disagree about
+verification gas because they simulate with different state, and an estimate from one is not a
+promise from the other.
+<ul>
+<li>Verification gas covers signature checks and the paymaster's own validation.
+<li>Call gas covers the operation the account actually wanted to perform.
+</ul>
+<div><span>Quotes go stale as the base fee moves; re-estimate if a submission is delayed.</div>
+</article>
+</main>
+<footer><p>Copyright 2026.</footer>

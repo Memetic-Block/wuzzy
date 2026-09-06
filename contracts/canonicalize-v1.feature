@@ -44,6 +44,37 @@ Feature: wuzzy/crawl canonicalization protocol v1
     Then the pipeline marks the page as skipped
     And no document row or attestation is produced for it
 
+  Scenario: site chrome never reaches the hash
+    Given fixture input "docs-page.html" containing nav, sidebar and footer text
+    When it is canonicalized under protocol v1
+    Then the canonical markdown contains none of that text
+    And it contains the article body
+
+  Scenario: the fetch URL is part of the input
+    Given fixture input "relative-links.html" canonicalized as fetched from two different URLs
+    When relative links in the page resolve against each URL
+    Then the two canonical outputs differ
+    And each is stable across repeated runs at the same URL
+
+  Scenario: line endings do not move the content hash
+    Given fixture input "docs-page.html"
+    And the same bytes with every LF replaced by CRLF
+    When both are canonicalized under protocol v1
+    Then the content hashes are equal
+    And the raw hashes differ
+
+  Scenario: malformed markup canonicalizes without failing
+    Given fixture input "malformed.html" with unclosed and mis-nested tags
+    When it is canonicalized under protocol v1
+    Then a canonical markdown output is produced
+    And canonicalizing it a second time yields the identical hash
+
+  Scenario: invalid UTF-8 bytes decode deterministically
+    Given fixture input "invalid-utf8.html" containing a truncated multi-byte sequence
+    When it is canonicalized under protocol v1
+    Then the invalid sequence becomes U+FFFD in the canonical markdown
+    And the content hash is the same on every run
+
   Scenario: raw hash commits to exact received bytes
     Given fixture input "docs-page.html" as a byte stream
     When the raw hash is computed

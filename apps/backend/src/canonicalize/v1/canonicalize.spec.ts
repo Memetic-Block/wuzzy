@@ -112,3 +112,87 @@ scenario('scripts, styles and comments never reach the hash', async () => {
   expect(result.markdown).toContain('per-account spend ceiling');
   expect(result.title).toBe('Sponsoring gas with a paymaster');
 });
+
+scenario('site chrome never reaches the hash', async () => {
+  const result = await canonicalizeFixture('docs-page.html');
+  expect(result.skipped).toBe(false);
+  if (result.skipped) return;
+
+  // Readability's whole job. Without it every page in a docs site shares its
+  // navigation, and the hash commits to the template rather than the article.
+  for (const chrome of ['Skip to content', 'On this page', 'Copyright', 'Edit this page']) {
+    expect(result.markdown).not.toContain(chrome);
+  }
+  expect(result.markdown.length).toBeGreaterThan(MIN_CONTENT_CHARS);
+});
+
+scenario('the fetch URL is part of the input', async () => {
+  const bytes = await readFixture('relative-links.html');
+  const at = (url: string) => canonicalize({ source: bytes, url, format: 'html' });
+
+  // Relative links resolve against the fetch URL, so the same bytes served
+  // from two places are two different documents. A verifier that does not
+  // pin the URL cannot reproduce the hash.
+  const first = at('https://docs.base.org/guides/deploy');
+  const second = at('https://example.test/elsewhere/deploy');
+  expect(first.skipped).toBe(false);
+  expect(second.skipped).toBe(false);
+  if (first.skipped || second.skipped) return;
+
+  expect(first.contentHash).not.toBe(second.contentHash);
+  expect(first.markdown).toContain('https://docs.base.org/deploy');
+  expect(second.markdown).toContain('https://example.test/deploy');
+
+  // Same bytes, same URL, same hash: the difference is the URL, not the run.
+  expect(at('https://docs.base.org/guides/deploy')).toMatchObject({
+    contentHash: first.contentHash,
+  });
+});
+
+scenario('line endings do not move the content hash', async () => {
+  const lf = await readFixture('docs-page.html');
+  const crlf = new TextEncoder().encode(
+    new TextDecoder().decode(lf).replace(/\r?\n/g, '\r\n'),
+  );
+
+  const url = fixtureUrl('docs-page.html');
+  const a = canonicalize({ source: lf, url, format: 'html' });
+  const b = canonicalize({ source: crlf, url, format: 'html' });
+  expect(a.skipped).toBe(false);
+  expect(b.skipped).toBe(false);
+  if (a.skipped || b.skipped) return;
+
+  // contentHash commits to the readable content; rawHash to the transfer.
+  expect(b.contentHash).toBe(a.contentHash);
+  expect(b.rawHash).not.toBe(a.rawHash);
+});
+
+scenario('malformed markup canonicalizes without failing', async () => {
+  const result = await canonicalizeFixture('malformed.html');
+  expect(result.skipped).toBe(false);
+  if (result.skipped) return;
+
+  // Unclosed and mis-nested tags are what the open web actually serves. The
+  // parser has to resolve them the same way every time, or the hash is a
+  // function of the parser's mood.
+  expect(result.markdown).toContain('A bundler quotes three limits');
+  expect(result.markdown).toContain('Call gas covers the operation');
+
+  const again = await canonicalizeFixture('malformed.html');
+  expect(again).toMatchObject({ contentHash: result.contentHash });
+  expect(normalize(result.markdown)).toBe(result.markdown);
+});
+
+scenario('invalid UTF-8 bytes decode deterministically', async () => {
+  const result = await canonicalizeFixture('invalid-utf8.html');
+  expect(result.skipped).toBe(false);
+  if (result.skipped) return;
+
+  // A truncated multi-byte sequence becomes the replacement character rather
+  // than throwing or being dropped, so a page with one bad byte still hashes.
+  expect(result.markdown).toContain('\uFFFD');
+  expect(result.markdown).toContain('the document continues normally after it');
+
+  const again = await canonicalizeFixture('invalid-utf8.html');
+  expect(again).toMatchObject({ contentHash: result.contentHash });
+});
