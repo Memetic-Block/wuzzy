@@ -138,7 +138,8 @@ describe('crawl provenance lifecycle', () => {
     const attestationUid = `0x${'a'.repeat(64)}`;
     await documents.update({ id: before.id }, { embeddedAt, attestationUid });
 
-    const summary = await crawl(source, { seeds, maxRequests: 5 });
+    // Freshness is not the subject here: force the re-fetch a later crawl would do.
+    const summary = await crawl(source, { seeds, maxRequests: 5, maxAgeDays: 0 });
     expect(summary.unchanged).toBe(1);
 
     const after = await documents.findOneOrFail({ where: { id: before.id } });
@@ -170,7 +171,8 @@ describe('crawl provenance lifecycle', () => {
     );
 
     mock.setPage('/guide', page('Deploy a contract', `${PROSE} The guide was revised.`));
-    const summary = await crawl(source, { seeds, maxRequests: 5 });
+    // Freshness is not the subject here: force the re-fetch a later crawl would do.
+    const summary = await crawl(source, { seeds, maxRequests: 5, maxAgeDays: 0 });
     expect(summary.changed).toBe(1);
 
     const after = await documents.findOneOrFail({ where: { id: before.id } });
@@ -422,7 +424,8 @@ describe('pages that stop being indexable', () => {
 
     // The site starts serving a client-rendered shell.
     mock.setPage('/guide', THIN);
-    await crawl(source, { seeds: [`${mock.origin}/guide`] });
+    // Freshness is not the subject here: force the re-fetch a later crawl would do.
+    await crawl(source, { seeds: [`${mock.origin}/guide`], maxAgeDays: 0 });
 
     const after = await documents.findOneOrFail({ where: { url: `${mock.origin}/guide` } });
     expect(after.unindexedAt).not.toBeNull();
@@ -449,10 +452,12 @@ describe('pages that stop being indexable', () => {
     await documents.update({ id: original.id }, { embeddedAt: new Date() });
 
     mock.setPage('/guide', THIN);
-    await crawl(source, { seeds: [`${mock.origin}/guide`] });
+    // Freshness is not the subject here: force the re-fetch a later crawl would do.
+    await crawl(source, { seeds: [`${mock.origin}/guide`], maxAgeDays: 0 });
     expect((await documents.findOneOrFail({ where: { id: original.id } })).unindexedAt).not.toBeNull();
 
     // The site renders again, serving exactly what it served the first time.
+    // No flag: an evicted document is always re-fetched, which is the point.
     mock.setPage('/guide', page('Guide', PROSE));
     await crawl(source, { seeds: [`${mock.origin}/guide`] });
 
@@ -462,5 +467,109 @@ describe('pages that stop being indexable', () => {
     // again or it would stay invisible with nothing scheduled to fix it.
     expect(restored.embeddedAt).toBeNull();
     expect(restored.contentHash).toBe(original.contentHash);
+  });
+});
+
+describe('sitemap freshness', () => {
+  /** A site whose sitemap states a lastmod we control. */
+  async function siteWithLastmod(lastmod: string) {
+    const mock = await site({ '/robots.txt': ROBOTS_ALLOW_ALL, '/guide': page('Guide', PROSE) });
+    mock.setPage(
+      '/sitemap.xml',
+      `<?xml version="1.0"?><urlset><url><loc>${mock.origin}/guide</loc>` +
+        `<lastmod>${lastmod}</lastmod></url></urlset>`,
+    );
+    return mock;
+  }
+
+  const requestsFor = (mock: MockSite, path: string) =>
+    mock.requests.filter((request) => request.url === path).length;
+
+  scenario('a page the sitemap calls unchanged is not re-fetched', async () => {
+    const source = db();
+    if (!source) return;
+
+    const mock = await siteWithLastmod('2020-01-01T00:00:00Z');
+    await crawl(source, { seeds: [`${mock.origin}/`] });
+
+    const documents = source.getRepository(DocumentEntity);
+    const first = await documents.findOneOrFail({ where: { url: `${mock.origin}/guide` } });
+    const before = requestsFor(mock, '/guide');
+    expect(before).toBeGreaterThan(0);
+
+    const summary = await crawl(source, { seeds: [`${mock.origin}/`] });
+
+    // The site said it has not changed since we fetched it, so we take its
+    // word in the direction that costs it nothing.
+    expect(requestsFor(mock, '/guide')).toBe(before);
+    expect(summary.fresh).toBeGreaterThan(0);
+    const after = await documents.findOneOrFail({ where: { id: first.id } });
+    expect(after.fetchedAt).toEqual(first.fetchedAt);
+    expect(after.contentHash).toBe(first.contentHash);
+  });
+
+  scenario('a page the sitemap calls changed is re-fetched', async () => {
+    const source = db();
+    if (!source) return;
+
+    const mock = await siteWithLastmod('2020-01-01T00:00:00Z');
+    await crawl(source, { seeds: [`${mock.origin}/`] });
+    const before = requestsFor(mock, '/guide');
+
+    // The site now claims an edit in the future relative to our fetch.
+    const ahead = new Date(Date.now() + 60_000).toISOString();
+    mock.setPage(
+      '/sitemap.xml',
+      `<?xml version="1.0"?><urlset><url><loc>${mock.origin}/guide</loc>` +
+        `<lastmod>${ahead}</lastmod></url></urlset>`,
+    );
+    const summary = await crawl(source, { seeds: [`${mock.origin}/`] });
+
+    expect(requestsFor(mock, '/guide')).toBeGreaterThan(before);
+    // Fetched, but the bytes are the same, so the hash says nothing changed.
+    // lastmod decides whether to ask; the content hash decides the answer.
+    expect(summary.unchanged).toBeGreaterThan(0);
+    expect(summary.changed).toBe(0);
+  });
+
+  scenario('a stale document is re-fetched however fresh the sitemap claims it is', async () => {
+    const source = db();
+    if (!source) return;
+
+    const mock = await siteWithLastmod('2020-01-01T00:00:00Z');
+    await crawl(source, { seeds: [`${mock.origin}/`] });
+    const before = requestsFor(mock, '/guide');
+
+    // A site that never moves its lastmod would otherwise be crawled once and
+    // trusted forever, so age alone eventually forces a re-fetch.
+    const summary = await crawl(source, { seeds: [`${mock.origin}/`], maxAgeDays: 0 });
+
+    expect(requestsFor(mock, '/guide')).toBeGreaterThan(before);
+    expect(summary.fresh).toBe(0);
+  });
+
+  scenario('a page with no sitemap claim is judged on age alone', async () => {
+    const source = db();
+    if (!source) return;
+
+    // No sitemap at all: every page here is found by following links, so
+    // nothing ever carries a lastmod.
+    const mock = await site({
+      '/robots.txt': ROBOTS_ALLOW_ALL,
+      '/': page('Home', PROSE, ['/guide']),
+      '/guide': page('Guide', PROSE),
+    });
+    await crawl(source, { seeds: [`${mock.origin}/`] });
+    const before = mock.requests.filter((r) => r.url === '/guide').length;
+    expect(before).toBeGreaterThan(0);
+
+    // Within the maximum age it is left alone. Treating "no claim" as "fetch"
+    // would re-fetch every link-discovered page on every run, forever.
+    await crawl(source, { seeds: [`${mock.origin}/`] });
+    expect(mock.requests.filter((r) => r.url === '/guide').length).toBe(before);
+
+    // Age alone eventually forces it, since nothing else ever will.
+    await crawl(source, { seeds: [`${mock.origin}/`], maxAgeDays: 0 });
+    expect(mock.requests.filter((r) => r.url === '/guide').length).toBeGreaterThan(before);
   });
 });

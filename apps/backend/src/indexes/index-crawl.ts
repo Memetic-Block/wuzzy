@@ -34,7 +34,10 @@ export async function crawlIndexQueue(
     [indexId],
   );
   if (pending.length === 0) {
-    return { created: 0, unchanged: 0, changed: 0, skipped: 0, failed: 0, requested: 0, indexed: 0 };
+    return {
+      created: 0, unchanged: 0, changed: 0, skipped: 0, failed: 0, fresh: 0,
+      requested: 0, indexed: 0,
+    };
   }
 
   const urls = pending.map((row) => row.url);
@@ -51,6 +54,9 @@ export async function crawlIndexQueue(
     maxConcurrency: options.maxConcurrency,
     minHostIntervalMs: options.minHostIntervalMs,
     fetcher: options.fetcher,
+    // Paid-for URLs are fetched whatever a sitemap claims: the payer asked for
+    // these pages now, and a freshness check would hand back an empty index.
+    refetchAll: true,
     onDocument: (event) => resolved.set(event.requestedUrl, event.url),
   });
 

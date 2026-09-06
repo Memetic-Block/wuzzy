@@ -5,7 +5,7 @@ import { canonicalize } from '../canonicalize/v1';
 import { createFetcher, type Fetcher } from './http';
 import { loadRobots, type RobotsPolicy } from './robots';
 import { recordFailedFetch, recordFetch, type FetchOutcome } from './provenance';
-import { collectSitemapUrls } from './sitemap';
+import { collectSitemapEntries, type SitemapEntry } from './sitemap';
 import { userAgent } from './user-agent';
 
 export interface CrawlOptions {
@@ -44,6 +44,18 @@ export interface CrawlOptions {
    * stored under the URL the origin ended up serving.
    */
   readonly onDocument?: (event: DocumentEvent) => void;
+  /**
+   * Re-fetch everything, ignoring what sitemaps claim about staleness. The
+   * escape hatch for a corpus that needs rebuilding after a canonicalizer
+   * change, where nothing about the sites moved but our output would.
+   */
+  readonly refetchAll?: boolean;
+  /**
+   * How long a document may go unfetched before it is re-fetched whatever the
+   * sitemap claims. A site that never updates its lastmod would otherwise be
+   * crawled once and trusted forever.
+   */
+  readonly maxAgeDays?: number;
   /** Injected by tests; production uses the honest fetcher. */
   readonly fetcher?: Fetcher;
 }
@@ -55,7 +67,13 @@ export interface DocumentEvent {
   readonly outcome: FetchOutcome;
 }
 
-export type CrawlSummary = Record<FetchOutcome | 'failed', number>;
+export type CrawlSummary = Record<FetchOutcome | 'failed', number> & {
+  /** URLs a sitemap said were unchanged since we last fetched them. */
+  fresh: number;
+};
+
+/** Re-fetch after this long even when a sitemap claims nothing has changed. */
+export const DEFAULT_MAX_AGE_DAYS = 14;
 
 /** One request per host per this many ms, by default. */
 export const DEFAULT_MIN_HOST_INTERVAL_MS = 250;
@@ -75,7 +93,14 @@ const MARKDOWN_LIKE = /^(text\/markdown|text\/x-markdown)/i;
  */
 export async function crawl(dataSource: DataSource, options: CrawlOptions): Promise<CrawlSummary> {
   const agent = userAgent();
-  const summary: CrawlSummary = { created: 0, unchanged: 0, changed: 0, skipped: 0, failed: 0 };
+  const summary: CrawlSummary = {
+    created: 0,
+    unchanged: 0,
+    changed: 0,
+    skipped: 0,
+    failed: 0,
+    fresh: 0,
+  };
 
   // Declared before `inScope` so the guard can close over it; robots.txt and
   // sitemaps are fetched without a guard, since robots cannot gate the request
@@ -161,7 +186,11 @@ export async function crawl(dataSource: DataSource, options: CrawlOptions): Prom
             error: `unusable content-type: ${contentType || 'none'}`,
             fetchedAt,
           });
-          summary.failed += 1;
+          // Not a failure: the request worked and the answer was simply not a
+          // page. A sitemap that lists XML schemas and plain-text files is
+          // normal, and reporting those as failures makes a healthy crawl look
+          // broken.
+          summary.skipped += 1;
           return;
         }
 
@@ -191,7 +220,15 @@ export async function crawl(dataSource: DataSource, options: CrawlOptions): Prom
 
         if (isMarkdown || options.discover === false) return;
         const links = await discoverLinks(response.bytes, response.url, inScope);
-        if (links.length > 0) await addRequests(links);
+        // Followed links carry no lastmod claim, so they are judged on age
+        // alone. Without this a re-crawl re-fetches every page that was found
+        // by following a link rather than by reading a sitemap.
+        const worth = await dropFreshUrls(
+          dataSource,
+          links.map((url) => ({ url, lastModified: null })),
+          options,
+        );
+        if (worth.length > 0) await addRequests(worth);
       },
       failedRequestHandler: async ({ request }, error) => {
         // Crawlee has exhausted its retries. The request was made, so it is
@@ -208,10 +245,65 @@ export async function crawl(dataSource: DataSource, options: CrawlOptions): Prom
     new Configuration({ persistStorage: false }),
   );
 
-  await crawler.run(
-    await discoverSeeds(options.seeds, fetcher, inScope, options.discover !== false),
+  const discovered = await discoverSeeds(
+    options.seeds,
+    fetcher,
+    inScope,
+    options.discover !== false,
   );
+  const queue = await dropFreshUrls(dataSource, discovered, options);
+  summary.fresh = discovered.length - queue.length;
+
+  await crawler.run(queue);
   return summary;
+}
+
+/**
+ * Removes URLs there is no reason to fetch again yet.
+ *
+ * A URL is fetched when we have never seen it, when it was evicted as
+ * unindexable, when we last fetched it longer ago than the maximum age, or
+ * when its sitemap claims an edit since our fetch. Otherwise it is left alone.
+ *
+ * `lastmod` is self-reported and frequently a build timestamp rather than a
+ * real edit, so it is only believed in the direction that does less work:
+ * `lastmod <= fetched_at` means the site is telling us not to bother, and a
+ * site that lies that way costs us a stale page rather than a wrong one. The
+ * maximum age is the backstop, and it is also the whole policy for the many
+ * sites that publish no sitemap at all, or whose pages we found by following
+ * links rather than by being told about them. Treating "no claim" as "fetch"
+ * instead would mean re-fetching every such page on every run forever.
+ *
+ * An evicted document is always re-fetched: it has no content left to go
+ * stale, and a sitemap has no way to say "it renders again now".
+ */
+async function dropFreshUrls(
+  dataSource: DataSource,
+  entries: readonly SitemapEntry[],
+  options: CrawlOptions,
+): Promise<string[]> {
+  if (options.refetchAll || entries.length === 0) return entries.map((entry) => entry.url);
+
+  const maxAgeMs = (options.maxAgeDays ?? DEFAULT_MAX_AGE_DAYS) * 24 * 60 * 60 * 1000;
+  const cutoff = new Date(Date.now() - maxAgeMs);
+
+  const rows: { url: string; fetched_at: Date; unindexed_at: Date | null }[] =
+    await dataSource.query(
+      `SELECT url, fetched_at, unindexed_at FROM documents WHERE url = ANY($1::text[])`,
+      [entries.map((entry) => entry.url)],
+    );
+  const known = new Map(rows.map((row) => [row.url, row]));
+
+  return entries
+    .filter((entry) => {
+      const existing = known.get(entry.url);
+      if (!existing || existing.unindexed_at !== null) return true;
+
+      const fetchedAt = new Date(existing.fetched_at);
+      if (fetchedAt < cutoff) return true;
+      return entry.lastModified !== null && entry.lastModified > fetchedAt;
+    })
+    .map((entry) => entry.url);
 }
 
 /** Seeds themselves, plus whatever their sitemaps advertise, minus anything out of scope. */
@@ -220,24 +312,25 @@ async function discoverSeeds(
   fetcher: Fetcher,
   inScope: (url: string) => Promise<boolean>,
   discover: boolean,
-): Promise<string[]> {
-  const candidates = new Set<string>();
+): Promise<SitemapEntry[]> {
+  const candidates = new Map<string, SitemapEntry>();
 
   for (const seed of seeds) {
-    candidates.add(seed);
+    // A seed itself carries no lastmod claim, so it is always considered.
+    candidates.set(seed, { url: seed, lastModified: null });
     if (!discover) continue;
     const { origin } = new URL(seed);
     const robots = await loadRobots(origin, fetcher);
-    for (const url of await collectSitemapUrls(sitemapsFor(origin, robots), fetcher)) {
-      candidates.add(url);
+    for (const entry of await collectSitemapEntries(sitemapsFor(origin, robots), fetcher)) {
+      if (!candidates.has(entry.url)) candidates.set(entry.url, entry);
     }
   }
 
-  const allowed: string[] = [];
-  for (const candidate of candidates) {
-    if (await inScope(candidate)) allowed.push(candidate);
+  const allowed: SitemapEntry[] = [];
+  for (const candidate of candidates.values()) {
+    if (await inScope(candidate.url)) allowed.push(candidate);
   }
-  return interleaveByHost(allowed);
+  return interleaveEntriesByHost(allowed);
 }
 
 /**
@@ -268,6 +361,12 @@ export function sitemapsFor(origin: string, robots: RobotsPolicy): string[] {
  * gets nothing. Interleaving makes a capped crawl a sample of all the seeds
  * rather than an exhaustive crawl of the first one or two.
  */
+export function interleaveEntriesByHost(entries: readonly SitemapEntry[]): SitemapEntry[] {
+  const order = interleaveByHost(entries.map((entry) => entry.url));
+  const byUrl = new Map(entries.map((entry) => [entry.url, entry]));
+  return order.map((url) => byUrl.get(url)!);
+}
+
 export function interleaveByHost(urls: readonly string[]): string[] {
   const byHost = new Map<string, string[]>();
   for (const url of urls) {

@@ -27,6 +27,30 @@ Feature: crawl provenance lifecycle
     And embedded_at is cleared so the embed pass will re-embed it
     And attestation_uid is cleared so the attestor will re-attest it
 
+  Scenario: a page the sitemap calls unchanged is not re-fetched
+    Given an indexed document whose sitemap lastmod is older than our fetch
+    When the crawler runs again
+    Then the URL is not requested
+    And the document is left exactly as it was
+
+  Scenario: a page the sitemap calls changed is re-fetched
+    Given an indexed document whose sitemap lastmod is newer than our fetch
+    When the crawler runs again
+    Then the URL is requested
+    And the content hash decides whether anything actually changed
+
+  Scenario: a page with no sitemap claim is judged on age alone
+    Given an indexed document that no sitemap mentions
+    When the crawler runs again within the maximum age
+    Then the URL is not requested
+    But it is requested once it is older than the maximum age
+
+  Scenario: a stale document is re-fetched however fresh the sitemap claims it is
+    Given an indexed document older than the maximum age
+    And a sitemap lastmod older than our fetch
+    When the crawler runs again
+    Then the URL is requested anyway
+
   Scenario: a page that stops yielding content leaves the index
     Given an indexed document whose page now returns too little content to index
     When the crawler fetches it again

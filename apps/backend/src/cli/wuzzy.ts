@@ -25,6 +25,8 @@ const USAGE = `wuzzy - provable crawl pipeline
                               --per-host=<n> caps pages fetched from each host
                               --index=<id|slug> crawl that index's queue instead,
                               fetching only the URLs it paid for
+                              --all re-fetch even pages a sitemap calls unchanged
+                              --max-age=<days> re-fetch anything older (default 14)
   wuzzy embed                 embed every document the crawler left pending
   wuzzy attest                attest every embedded document that has no UID yet
   wuzzy verify <url>          re-derive the hash for one indexed URL
@@ -78,15 +80,29 @@ async function main(argv: readonly string[]): Promise<number> {
           return result.requested > 0 && result.indexed === 0 ? 1 : 0;
         }
 
+        const maxAgeFlag = args.find((arg) => arg.startsWith('--max-age='));
+        const maxAgeDays = maxAgeFlag
+          ? Number(maxAgeFlag.slice('--max-age='.length))
+          : process.env.CRAWL_MAX_AGE_DAYS
+            ? Number(process.env.CRAWL_MAX_AGE_DAYS)
+            : undefined;
+        if (maxAgeDays !== undefined && (!Number.isFinite(maxAgeDays) || maxAgeDays < 0)) {
+          console.error('--max-age must be a non-negative number of days');
+          return 1;
+        }
+
         const summary = await crawl(dataSource, {
           seeds,
           maxRequests,
           maxPerHost,
           indexId: target.id,
+          refetchAll: args.includes('--all'),
+          maxAgeDays,
         });
         console.log(
           `created ${summary.created}  changed ${summary.changed}  ` +
-            `unchanged ${summary.unchanged}  skipped ${summary.skipped}  failed ${summary.failed}`,
+            `unchanged ${summary.unchanged}  skipped ${summary.skipped}  ` +
+            `failed ${summary.failed}  fresh ${summary.fresh}`,
         );
         return summary.failed > 0 ? 1 : 0;
       }
