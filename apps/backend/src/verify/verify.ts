@@ -1,5 +1,5 @@
 import type { DataSource } from 'typeorm';
-import { canonicalize } from '../canonicalize/v1';
+import { canonicalize, PROTOCOL } from '../canonicalize/v1';
 import { DocumentEntity } from '../database/document.entity';
 import { createFetcher, type Fetcher } from '../crawl/http';
 import { chainSettings } from '../attest/chain';
@@ -96,7 +96,7 @@ export function formatVerifyResult(result: VerifyResult): string {
     `${result.status === 'match' ? 'MATCH' : 'MISMATCH'}  ${result.url}`,
     `  attested hash    ${result.attestedHash}`,
     `  recomputed hash  ${result.recomputedHash ?? '(page is now too thin to index)'}`,
-    `  protocol         wuzzy/crawl v${result.protocolVersion}`,
+    `  protocol         ${PROTOCOL} v${result.protocolVersion}`,
   ];
   lines.push(
     result.attestationUrl === null

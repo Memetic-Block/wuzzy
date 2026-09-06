@@ -6,14 +6,16 @@ document is the prose twin of the executable spec in
 vectors in [fixtures/canonicalize-v1/](fixtures/canonicalize-v1/). It exists so that a third
 party can write an independent verifier without reading our source.
 
-> **Status: draft, pending review.** The procedure below matches the reference
-> implementation as of this commit, and the vectors were generated from it. Nothing here is
-> frozen until the first mainnet attestation lands. See "Freezing" at the end.
+> **Status: experimental.** Attestations carry the protocol identifier
+> `wuzzy/crawl-experimental`, which is this procedure saying outright that it makes no
+> permanence promise yet. It may change without becoming version 2. Do not build a verifier
+> against it expecting stability; the suffix disappearing is the announcement that it has
+> frozen. See "Freezing" at the end.
 
 ## What is attested
 
-An attestation carries the URL, the protocol identifier `wuzzy/crawl`, the protocol version,
-the fetch time, and two hashes:
+An attestation carries the URL, the protocol identifier `wuzzy/crawl-experimental`, the
+protocol version, the fetch time, and two hashes:
 
 - **`rawHash`** — sha256 over the exact bytes the origin served, with no normalization of any
   kind. It commits to the transfer.
@@ -86,10 +88,21 @@ The input files in `fixtures/canonicalize-v1/` are authored by hand and are the 
 `.md` and `.hash` files are generated output, reviewed once and then frozen as regression
 vectors.
 
+## Identifying a procedure
+
+A procedure is identified by the **pair** `(protocol, protocolVersion)`, never by the version
+alone. `wuzzy/crawl-experimental` v1 and a future stable `wuzzy/crawl` v1 are different
+procedures that happen to share a version number, and a verifier keying on the number would
+run the wrong one against a hash that then fails to reproduce. Both fields are in the
+attestation for exactly this reason.
+
 ## Freezing
 
-Once the first attestation lands on Base mainnet, this document,
+While the identifier carries `-experimental` nothing here is frozen: it is a demo-stage
+artifact, and no promise has been made to anyone building against it.
+
+Dropping the suffix is the freeze. From that point this document,
 `contracts/canonicalize-v1.feature`, its fixtures, and the `v1` module are immutable. A
-change in behaviour after that point is protocol version 2, implemented in a new module
-beside `v1`, with its own feature file and its own vectors. Version 1 stays callable
-indefinitely, because attestations that reference it have to stay verifiable.
+change in behaviour after that is protocol version 2, implemented in a new module beside
+`v1`, with its own feature file and its own vectors. Version 1 stays callable indefinitely,
+because attestations that reference it have to stay verifiable.

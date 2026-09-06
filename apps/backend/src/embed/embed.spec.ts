@@ -8,6 +8,7 @@ import { truncateWuzzyTables } from '../testing/database';
 import { chunk } from './chunker';
 import { embedPending } from './embed';
 import { DEFAULT_DIMENSIONS, type Embedder } from './embedder';
+import { PROTOCOL } from '../canonicalize/v1';
 
 let dataSource: DataSource | undefined;
 let unreachable: string | undefined;
@@ -63,7 +64,7 @@ const saveDocument = (source: DataSource, url: string, content: string) =>
     content,
     rawHash: 'a'.repeat(64),
     contentHash: 'b'.repeat(64),
-    protocol: 'wuzzy/crawl',
+    protocol: PROTOCOL,
     protocolVersion: 1,
     robotsStatus: 'allowed',
     httpStatus: 200,

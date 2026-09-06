@@ -8,8 +8,11 @@ These are not preferences. A change that breaks one of them is wrong even if it 
 
 - Crawler is transparent: WuzzyBot user-agent, robots.txt respected, no stealth,
   no fingerprint evasion, no proxy rotation — ever.
-- src/canonicalize/v1 is FROZEN once the first mainnet attestation lands; behavior
-  changes are v2 in a new module. v1 stays callable forever.
+- src/canonicalize/v1 is FROZEN once its protocol identifier drops the
+  `-experimental` suffix; until then it is a demo-stage artifact and may change.
+  After the freeze, behavior changes are v2 in a new module. v1 stays callable
+  forever. A procedure is identified by the pair (protocol, protocolVersion),
+  never by the version alone.
 - Only hashes + metadata go onchain. Never content.
 - No funded keys in this repo, in sessions, or on this machine. Scenarios tagged
   @mainnet @manual are run by a human, never by CI or agents.

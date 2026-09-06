@@ -14,6 +14,7 @@ import {
 import { decodeAttestation, encodeAttestation, schemaCarriesNoContent } from './schema';
 import { chainSettings, EAS_ADDRESS, SCHEMA_REGISTRY_ADDRESS, UnknownChainError } from './chain';
 import { attestationUrl } from '../verify/verify';
+import { PROTOCOL, PROTOCOL_VERSION } from '../canonicalize/v1';
 
 let dataSource: DataSource | undefined;
 let unreachable: string | undefined;
@@ -208,5 +209,32 @@ describe('attestation chain', () => {
     // predeploys at identical addresses, so the address is not per-chain.
     expect(EAS_ADDRESS).toBe('0x4200000000000000000000000000000000000021');
     expect(SCHEMA_REGISTRY_ADDRESS).toBe('0x4200000000000000000000000000000000000020');
+  });
+});
+
+describe('protocol identifier', () => {
+  /**
+   * The one place the literal is pinned. Everything else derives from the
+   * constant, so this is what has to be changed deliberately, and changing it
+   * is a protocol announcement rather than a refactor.
+   */
+  it('carries the experimental label, and is half of what identifies a procedure', () => {
+    expect(PROTOCOL).toBe('wuzzy/crawl-experimental');
+    expect(PROTOCOL_VERSION).toBe(1);
+
+    // The pair goes onchain, so a verifier can tell a future stable
+    // wuzzy/crawl v1 from this experimental v1 rather than running the wrong
+    // procedure against a hash that will not reproduce.
+    const encoded = encodeAttestation({
+      url: 'https://docs.base.org/x',
+      protocol: PROTOCOL,
+      protocolVersion: PROTOCOL_VERSION,
+      contentHash: 'b'.repeat(64),
+      rawHash: 'a'.repeat(64),
+      fetchedAt: new Date('2026-02-01T00:00:00Z'),
+    });
+    const decoded = decodeAttestation(encoded);
+    expect(decoded.protocol).toBe('wuzzy/crawl-experimental');
+    expect(decoded.protocolVersion).toBe('1');
   });
 });

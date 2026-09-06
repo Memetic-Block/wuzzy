@@ -13,6 +13,7 @@ import { ADMIN_CONFIG, buildAdminConfig, type AdminConfig } from './admin.config
 import { AdminController } from './admin.controller';
 import { AdminGuard } from './admin.guard';
 import { AdminService } from './admin.service';
+import { PROTOCOL } from '../canonicalize/v1';
 
 let dataSource: DataSource | undefined;
 let reason = '';
@@ -65,7 +66,7 @@ async function seed(source: DataSource, count: number) {
       content: `# Page ${index}\n\nBody text.\n`,
       rawHash: 'a'.repeat(64),
       contentHash: String(index).padStart(64, 'b'),
-      protocol: 'wuzzy/crawl',
+      protocol: PROTOCOL,
       protocolVersion: 1,
       robotsStatus: 'allowed',
       httpStatus: 200,
@@ -109,7 +110,7 @@ describe('admin API', () => {
     expect(stats.embedded).toBe(2);
     expect(stats.attested).toBe(1);
     expect(stats.hosts).toEqual([{ host: 'docs.base.org', documents: 4 }]);
-    expect(stats.protocols[0]).toEqual({ protocol: 'wuzzy/crawl', protocolVersion: 1, documents: 4 });
+    expect(stats.protocols[0]).toEqual({ protocol: PROTOCOL, protocolVersion: 1, documents: 4 });
   });
 
   it('lists indexes with the counts that say whether they are finished', async () => {

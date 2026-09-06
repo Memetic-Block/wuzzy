@@ -9,6 +9,7 @@ import { reciprocalRankFusion } from './fusion';
 import { lexicalSearch } from './lexical';
 import { buildSearchConfig, type SearchConfig } from './search.config';
 import { SearchService } from './search.service';
+import { PROTOCOL } from '../canonicalize/v1';
 
 const DIMENSIONS = 1536;
 
@@ -66,7 +67,7 @@ async function addChunk(
       content: text,
       rawHash: 'a'.repeat(64),
       contentHash: 'b'.repeat(64),
-      protocol: 'wuzzy/crawl',
+      protocol: PROTOCOL,
       protocolVersion: 1,
       robotsStatus: 'allowed',
       httpStatus: 200,

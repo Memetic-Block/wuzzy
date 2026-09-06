@@ -5,6 +5,7 @@ import { ChunkEntity } from './chunk.entity';
 import { DocumentEntity } from './document.entity';
 import { FetchLogEntity } from './fetch-log.entity';
 import { buildDataSourceOptions } from './typeorm.config';
+import { PROTOCOL } from '../canonicalize/v1';
 
 /**
  * Guards the hand-written migration against the entities. The migration owns
@@ -50,7 +51,7 @@ describe('wuzzy schema', () => {
       content: '# Deploy\n',
       rawHash: hex('a'),
       contentHash: hex('b'),
-      protocol: 'wuzzy/crawl',
+      protocol: PROTOCOL,
       protocolVersion: 1,
       robotsStatus: 'allowed',
       httpStatus: 200,

@@ -24,6 +24,7 @@ import { crawlIndexQueue } from './index-crawl';
 import { INDEXES_CONFIG, buildIndexesConfig } from './index.config';
 import { IndexesController } from './indexes.controller';
 import { IndexesService } from './indexes.service';
+import { PROTOCOL } from '../canonicalize/v1';
 
 crawleeLog.setLevel(LogLevel.WARNING);
 
@@ -176,7 +177,7 @@ async function seedDocument(
     content: `# ${url.split('/').pop()}\n\n${text}\n`,
     rawHash: hashOf(`raw:${url}`),
     contentHash: hashOf(url),
-    protocol: 'wuzzy/crawl',
+    protocol: PROTOCOL,
     protocolVersion: 1,
     robotsStatus: 'allowed',
     httpStatus: 200,

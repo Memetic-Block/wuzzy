@@ -26,6 +26,12 @@ Feature: wuzzy/crawl canonicalization protocol v1
       | markdown-native.md         | markdown-native.expected.md   | markdown-native.hash            |
       | readability-fallback.html  | readability-fallback.md       | readability-fallback.hash       |
 
+  Scenario: scripts, styles and comments never reach the hash
+    Given fixture input "inline-code.html" with an inline script, a style block and comments
+    When it is canonicalized under protocol v1
+    Then the canonical markdown contains none of their text
+    And it contains the article body
+
   Scenario: normalization is idempotent
     Given any canonical markdown output from protocol v1
     When it is normalized again under protocol v1

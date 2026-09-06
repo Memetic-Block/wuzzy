@@ -25,7 +25,7 @@ export class DocumentEntity {
   @Column('char', { length: 64, name: 'content_hash' })
   contentHash!: string;
 
-  @Column('text', { default: 'wuzzy/crawl' })
+  @Column('text', { default: 'wuzzy/crawl-experimental' })
   protocol!: string;
 
   @Column('integer', { name: 'protocol_version' })

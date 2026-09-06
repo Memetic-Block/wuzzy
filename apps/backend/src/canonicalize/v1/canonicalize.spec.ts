@@ -84,3 +84,31 @@ describe('wuzzy/crawl canonicalization protocol v1', () => {
     expect(fromCrlf.rawHash).not.toBe(result.rawHash);
   });
 });
+
+scenario('scripts, styles and comments never reach the hash', async () => {
+  const result = await canonicalizeFixture('inline-code.html');
+
+  expect(result.skipped).toBe(false);
+  if (result.skipped) return;
+
+  // A client-rendered page gives Readability nothing to extract, so the whole
+  // body is converted instead. That is the path where an inline theme-switcher
+  // becomes the page's entire indexed content, as seen on docs.attest.org.
+  for (const fragment of [
+    'localStorage',
+    'setAttribute',
+    'data-theme',
+    'window.analytics',
+    '--brand',
+    '.sidebar',
+    'commit 9f3ac1',
+    'TODO: link the policy reference',
+  ]) {
+    expect(result.markdown).not.toContain(fragment);
+  }
+
+  // The article itself survives: this removes code, not content.
+  expect(result.markdown).toContain('A paymaster settles gas on behalf of an account');
+  expect(result.markdown).toContain('per-account spend ceiling');
+  expect(result.title).toBe('Sponsoring gas with a paymaster');
+});

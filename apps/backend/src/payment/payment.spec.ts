@@ -18,6 +18,7 @@ import { scenario } from '../testing/scenario';
 import { PAYMENT_CONFIG, type PaymentConfig } from './payment.config';
 import { PaymentService } from './payment.service';
 import { startMockFacilitator, type MockFacilitator } from './mock-facilitator';
+import { PROTOCOL } from '../canonicalize/v1';
 
 const DIMENSIONS = 1536;
 const PAY_TO = '0x2222222222222222222222222222222222222222';
@@ -110,7 +111,7 @@ async function seedCorpus(source: DataSource, attestationUid: string | null) {
     content: `# Deploy\n\n${text}\n`,
     rawHash: 'a'.repeat(64),
     contentHash: 'b'.repeat(64),
-    protocol: 'wuzzy/crawl',
+    protocol: PROTOCOL,
     protocolVersion: 1,
     robotsStatus: 'allowed',
     httpStatus: 200,
@@ -206,7 +207,7 @@ describe('x402-metered search', () => {
       expect(typeof result.snippet).toBe('string');
       expect(typeof result.score).toBe('number');
 
-      expect(result.provenance.protocol).toBe('wuzzy/crawl');
+      expect(result.provenance.protocol).toBe(PROTOCOL);
       expect(result.provenance.protocolVersion).toBe(1);
       expect(result.provenance.contentHash).toBe('b'.repeat(64));
       expect(result.provenance.fetchedAt).toBe('2026-02-01T00:00:00.000Z');
