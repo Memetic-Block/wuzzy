@@ -1,6 +1,6 @@
 import { Controller, Get, NotFoundException, Param, Query, UseGuards } from '@nestjs/common';
 import { AdminGuard } from './admin.guard';
-import { AdminService, type DocumentFilter } from './admin.service';
+import { AdminService, type ActivityFilter, type DocumentFilter } from './admin.service';
 
 /** Read-only. Nothing here writes, and nothing here computes a hash. */
 @Controller('admin')
@@ -47,7 +47,12 @@ export class AdminController {
   }
 
   @Get('activity')
-  activity(@Query('limit') limit?: string) {
-    return this.admin.activity(limit ? Number(limit) : undefined);
+  activity(@Query('limit') limit?: string, @Query('filter') filter?: string) {
+    return this.admin.activity(
+      limit ? Number(limit) : undefined,
+      (['failed', 'skipped', 'changed'].includes(filter ?? '')
+        ? filter
+        : 'all') as ActivityFilter,
+    );
   }
 }

@@ -187,6 +187,34 @@ describe('admin API', () => {
     expect(detail.attestationUrl).toContain('base.easscan.org');
   });
 
+  it('filters activity in SQL rather than after the limit', async () => {
+    const source = ready();
+    if (!source) return;
+    await seed(source, 3);
+
+    // One request that produced nothing: an error row with no document.
+    await source.getRepository(FetchLogEntity).save({
+      url: 'https://docs.base.org/gone',
+      httpStatus: 404,
+      error: 'HTTP 404',
+      contentChanged: false,
+      fetchedAt: new Date(),
+    });
+
+    const url = await boot(source);
+    const all = await (await fetch(`${url}/admin/activity`)).json();
+    const failed = await (await fetch(`${url}/admin/activity?filter=failed`)).json();
+
+    expect(all.length).toBe(4);
+    expect(failed.length).toBe(1);
+    expect(failed[0].url).toBe('https://docs.base.org/gone');
+
+    // Narrowing after the limit would return one row and call it the last 50.
+    const capped = await (await fetch(`${url}/admin/activity?limit=1&filter=failed`)).json();
+    expect(capped.length).toBe(1);
+    expect(capped[0].error).toBe('HTTP 404');
+  });
+
   it('404s an unknown document', async () => {
     const source = ready();
     if (!source) return;

@@ -4,17 +4,27 @@ import { join } from 'node:path';
 import { buildAll } from '../build';
 
 describe('admin static build', () => {
-  it('pre-renders the admin page and its script', async () => {
+  it('pre-renders a page per view, each carrying the nav and the noindex rule', async () => {
     const written = await buildAll();
-    expect(written.length).toBeGreaterThan(0);
-
     const distDir = join(import.meta.dir, '..', 'dist');
+
+    // A page per view rather than one long scroll; the nav is shared, so a
+    // page that forgot noindex or the nav would be a page reachable on its own.
+    const pages = ['index', 'indexes', 'documents', 'document', 'activity'];
+    expect(written.length).toBe(pages.length);
+    for (const name of pages) {
+      const html = await Bun.file(join(distDir, `${name}.html`)).text();
+      expect(html).toStartWith('<!doctype html>');
+      expect(html).toContain('noindex');
+      expect(html).toContain('data-nav');
+      expect(html).toContain('id="admin-error"');
+    }
+
     const index = await Bun.file(join(distDir, 'index.html')).text();
-    expect(index).toStartWith('<!doctype html>');
     expect(index).toContain('<title>Wuzzy admin</title>');
     expect(index).toContain('id="stats"');
-    // An operator tool must not be indexable.
-    expect(index).toContain('noindex');
+    expect(await Bun.file(join(distDir, 'documents.html')).text()).toContain('id="doc-filter"');
+    expect(await Bun.file(join(distDir, 'activity.html')).text()).toContain('id="act-filter"');
 
     // Content-addressed, and every reference resolves.
     const assets = [...index.matchAll(/(?:src|href)="(\/[^"]+\.(?:js|css))"/g)].map((m) => m[1]!);

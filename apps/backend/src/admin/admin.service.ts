@@ -38,6 +38,7 @@ export interface DocumentPage {
 }
 
 export type DocumentFilter = 'all' | 'unembedded' | 'unattested' | 'attested';
+export type ActivityFilter = 'all' | 'failed' | 'skipped' | 'changed';
 
 export interface IndexSummaryRow {
   readonly id: string;
@@ -233,12 +234,26 @@ export class AdminService {
     };
   }
 
-  /** Recent crawl activity, including fetches that produced no document. */
-  async activity(limit = 50): Promise<unknown[]> {
+  /**
+   * Recent crawl activity, including fetches that produced no document.
+   *
+   * Filtering is done in SQL rather than on the returned page: narrowing after
+   * the limit would return a handful of rows and call it the last 50.
+   */
+  async activity(limit = 50, filter: ActivityFilter = 'all'): Promise<unknown[]> {
+    const where =
+      filter === 'failed'
+        ? 'WHERE f.error IS NOT NULL'
+        : filter === 'skipped'
+          ? 'WHERE f.skipped_reason IS NOT NULL'
+          : filter === 'changed'
+            ? 'WHERE f.content_changed'
+            : '';
+
     return this.dataSource.query(
       `SELECT f.id, f.url, f.http_status, f.content_changed, f.skipped_reason,
               f.error, f.fetched_at, f.document_id
-       FROM fetch_log f ORDER BY f.fetched_at DESC LIMIT $1`,
+       FROM fetch_log f ${where} ORDER BY f.fetched_at DESC LIMIT $1`,
       [Math.min(Math.max(limit, 1), MAX_LIMIT)],
     );
   }
