@@ -9,6 +9,8 @@ export interface IndexStats {
   readonly fetches: number;
   readonly embedded: number;
   readonly attested: number;
+  /** Documents kept for provenance but no longer searchable. */
+  readonly unindexed: number;
   readonly skipped: number;
   readonly failed: number;
   readonly firstFetchedAt: string | null;
@@ -37,7 +39,7 @@ export interface DocumentPage {
   readonly documents: DocumentSummary[];
 }
 
-export type DocumentFilter = 'all' | 'unembedded' | 'unattested' | 'attested';
+export type DocumentFilter = 'all' | 'unembedded' | 'unattested' | 'attested' | 'unindexed';
 export type ActivityFilter = 'all' | 'failed' | 'skipped' | 'changed';
 
 export interface IndexSummaryRow {
@@ -70,6 +72,7 @@ export class AdminService {
         (SELECT count(*) FROM fetch_log)                                   AS fetches,
         (SELECT count(*) FROM documents WHERE embedded_at IS NOT NULL)     AS embedded,
         (SELECT count(*) FROM documents WHERE attestation_uid IS NOT NULL) AS attested,
+        (SELECT count(*) FROM documents WHERE unindexed_at IS NOT NULL)     AS unindexed,
         (SELECT count(*) FROM fetch_log WHERE skipped_reason IS NOT NULL)  AS skipped,
         (SELECT count(*) FROM fetch_log WHERE error IS NOT NULL)           AS failed,
         (SELECT min(fetched_at) FROM documents)                            AS first_fetched_at,
@@ -93,6 +96,7 @@ export class AdminService {
       fetches: Number(totals.fetches),
       embedded: Number(totals.embedded),
       attested: Number(totals.attested),
+      unindexed: Number(totals.unindexed),
       skipped: Number(totals.skipped),
       failed: Number(totals.failed),
       firstFetchedAt: totals.first_fetched_at ? new Date(totals.first_fetched_at).toISOString() : null,
@@ -172,6 +176,9 @@ export class AdminService {
     if (options.filter === 'unembedded') where.push('d.embedded_at IS NULL');
     if (options.filter === 'unattested') where.push('d.attestation_uid IS NULL');
     if (options.filter === 'attested') where.push('d.attestation_uid IS NOT NULL');
+    // Kept in the store for its provenance, but out of search: the page stopped
+    // returning anything worth indexing.
+    if (options.filter === 'unindexed') where.push('d.unindexed_at IS NOT NULL');
     const clause = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
 
     const [count] = await this.dataSource.query(

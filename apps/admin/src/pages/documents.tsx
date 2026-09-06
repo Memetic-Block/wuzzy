@@ -22,6 +22,7 @@ export default () => (
         <option value="unembedded">not embedded</option>
         <option value="unattested">not attested</option>
         <option value="attested">attested</option>
+        <option value="unindexed">unindexed</option>
       </select>
     </div>
 

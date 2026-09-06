@@ -74,6 +74,7 @@
         tile('Fetches', s.fetches, s.skipped + ' skipped, ' + s.failed + ' failed') +
         tile('Embedded', s.embedded + '/' + s.documents) +
         tile('Attested', s.attested + '/' + s.documents, pct + '% onchain') +
+        tile('Unindexed', s.unindexed, 'kept for provenance, out of search') +
         tile('Protocols', s.protocols[0]
           ? s.protocols[0].protocol + ' v' + s.protocols[0].protocolVersion : '-') +
         tile('First fetch', s.firstFetchedAt

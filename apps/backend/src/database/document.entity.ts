@@ -51,6 +51,15 @@ export class DocumentEntity {
   @Column('timestamptz', { name: 'attested_at', nullable: true })
   attestedAt!: Date | null;
 
+  /**
+   * Set when a fetch stopped yielding indexable content, cleared by the next
+   * one that does. A stamped document is out of search but keeps its hashes,
+   * its history and its attestation, because those stay true of what was
+   * fetched at the time.
+   */
+  @Column('timestamptz', { name: 'unindexed_at', nullable: true })
+  unindexedAt!: Date | null;
+
   @Column('timestamptz', { name: 'created_at', default: () => 'now()' })
   createdAt!: Date;
 

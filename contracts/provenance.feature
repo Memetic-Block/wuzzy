@@ -27,6 +27,19 @@ Feature: crawl provenance lifecycle
     And embedded_at is cleared so the embed pass will re-embed it
     And attestation_uid is cleared so the attestor will re-attest it
 
+  Scenario: a page that stops yielding content leaves the index
+    Given an indexed document whose page now returns too little content to index
+    When the crawler fetches it again
+    Then the document is marked unindexed and its chunks are removed
+    But its hashes, its fetch history and its attestation uid are unchanged
+    And it no longer appears in search results
+
+  Scenario: a page that starts yielding content again returns to the index
+    Given a document marked unindexed by an earlier fetch
+    When a later fetch produces indexable content
+    Then the unindexed mark is cleared
+    And the document is queued for embedding so it can be searched again
+
   Scenario: a request that returns an error is still recorded
     When the crawler fetches a URL that answers with an error status
     Then a fetch_log row records the URL, the status and the error

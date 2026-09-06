@@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'bun:test';
 import 'reflect-metadata';
 import { LogLevel, log as crawleeLog } from '@crawlee/basic';
 import { DataSource } from 'typeorm';
+import { ChunkEntity } from '../database/chunk.entity';
 import { DocumentEntity } from '../database/document.entity';
 import { FetchLogEntity } from '../database/fetch-log.entity';
 import { buildDataSourceOptions } from '../database/typeorm.config';
@@ -398,5 +399,68 @@ describe('failed fetches leave a trail', () => {
     expect((await source.getRepository(DocumentEntity).find()).map((d) => d.url)).toEqual([
       `${mock.origin}/`,
     ]);
+  });
+});
+
+describe('pages that stop being indexable', () => {
+  const THIN = '<!doctype html><html><head><title>Shell</title></head><body><div id="app"></div></body></html>';
+
+  scenario('a page that stops yielding content leaves the index', async () => {
+    const source = db();
+    if (!source) return;
+
+    const mock = await site({ '/robots.txt': ROBOTS_ALLOW_ALL, '/guide': page('Guide', PROSE) });
+    await crawl(source, { seeds: [`${mock.origin}/guide`] });
+
+    const documents = source.getRepository(DocumentEntity);
+    const before = await documents.findOneOrFail({ where: { url: `${mock.origin}/guide` } });
+    // Stand in for the embed pass, so there is something to evict.
+    await source.getRepository(ChunkEntity).insert({
+      documentId: before.id, ordinal: 0, text: PROSE, tokenCount: 20,
+    });
+    await documents.update({ id: before.id }, { attestationUid: `0x${'e'.repeat(64)}` });
+
+    // The site starts serving a client-rendered shell.
+    mock.setPage('/guide', THIN);
+    await crawl(source, { seeds: [`${mock.origin}/guide`] });
+
+    const after = await documents.findOneOrFail({ where: { url: `${mock.origin}/guide` } });
+    expect(after.unindexedAt).not.toBeNull();
+    expect(await source.getRepository(ChunkEntity).countBy({ documentId: after.id })).toBe(0);
+
+    // Provenance is untouched: these stay true of what was fetched before.
+    expect(after.contentHash).toBe(before.contentHash);
+    expect(after.rawHash).toBe(before.rawHash);
+    expect(after.attestationUid).toBe(`0x${'e'.repeat(64)}`);
+    expect(
+      await source.getRepository(FetchLogEntity).countBy({ url: `${mock.origin}/guide` }),
+    ).toBe(2);
+  });
+
+  scenario('a page that starts yielding content again returns to the index', async () => {
+    const source = db();
+    if (!source) return;
+
+    const mock = await site({ '/robots.txt': ROBOTS_ALLOW_ALL, '/guide': page('Guide', PROSE) });
+    await crawl(source, { seeds: [`${mock.origin}/guide`] });
+
+    const documents = source.getRepository(DocumentEntity);
+    const original = await documents.findOneOrFail({ where: { url: `${mock.origin}/guide` } });
+    await documents.update({ id: original.id }, { embeddedAt: new Date() });
+
+    mock.setPage('/guide', THIN);
+    await crawl(source, { seeds: [`${mock.origin}/guide`] });
+    expect((await documents.findOneOrFail({ where: { id: original.id } })).unindexedAt).not.toBeNull();
+
+    // The site renders again, serving exactly what it served the first time.
+    mock.setPage('/guide', page('Guide', PROSE));
+    await crawl(source, { seeds: [`${mock.origin}/guide`] });
+
+    const restored = await documents.findOneOrFail({ where: { id: original.id } });
+    expect(restored.unindexedAt).toBeNull();
+    // Identical bytes, but its chunks were dropped, so it has to be embedded
+    // again or it would stay invisible with nothing scheduled to fix it.
+    expect(restored.embeddedAt).toBeNull();
+    expect(restored.contentHash).toBe(original.contentHash);
   });
 });

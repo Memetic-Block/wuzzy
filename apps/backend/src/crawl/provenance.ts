@@ -1,4 +1,5 @@
 import type { DataSource } from 'typeorm';
+import { ChunkEntity } from '../database/chunk.entity';
 import { DocumentEntity } from '../database/document.entity';
 import { FetchLogEntity } from '../database/fetch-log.entity';
 import { PROTOCOL, PROTOCOL_VERSION, type CanonicalizeResult } from '../canonicalize/v1';
@@ -65,11 +66,26 @@ export async function recordFetch(
         skippedReason: record.canonical.reason,
         fetchedAt: record.fetchedAt,
       });
+
+      // A page that used to have content and no longer does leaves search at
+      // once. The row stays: its hashes, its history and any attestation are
+      // still true of what was fetched then, and only the chunks, which exist
+      // solely to be searched, are dropped.
+      if (existing && existing.unindexedAt === null) {
+        await documents.update(
+          { id: existing.id },
+          { unindexedAt: record.fetchedAt, updatedAt: new Date() },
+        );
+        await manager.getRepository(ChunkEntity).delete({ documentId: existing.id });
+      }
       return { outcome: 'skipped', documentId: existing?.id ?? null };
     }
 
     const { rawHash, contentHash, markdown, title } = record.canonical;
-    const changed = existing !== null && existing.contentHash !== contentHash;
+    // An evicted page coming back is a change even when the bytes match what
+    // was last stored, because its chunks were dropped and have to be rebuilt.
+    const changed =
+      existing !== null && (existing.contentHash !== contentHash || existing.unindexedAt !== null);
 
     const saved = await documents.save({
       ...(existing ? { id: existing.id } : {}),
@@ -84,6 +100,9 @@ export async function recordFetch(
       httpStatus: record.httpStatus,
       fetchedAt: record.fetchedAt,
       updatedAt: new Date(),
+      // Content again, so the page is back in the index. Self-healing on
+      // purpose: a site that rendered badly once is not evicted for good.
+      unindexedAt: null,
       // A new document has nothing downstream yet; a changed one has its
       // downstream artifacts invalidated; an unchanged one keeps them.
       ...(existing && !changed

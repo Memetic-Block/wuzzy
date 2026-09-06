@@ -31,7 +31,7 @@ export class AdminController {
       query: query?.trim() || undefined,
       host: host?.trim() || undefined,
       index: index?.trim() || undefined,
-      filter: (['unembedded', 'unattested', 'attested'].includes(filter ?? '')
+      filter: (['unembedded', 'unattested', 'attested', 'unindexed'].includes(filter ?? '')
         ? filter
         : 'all') as DocumentFilter,
       limit: limit ? Number(limit) : undefined,
