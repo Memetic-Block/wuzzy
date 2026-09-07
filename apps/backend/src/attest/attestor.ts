@@ -70,7 +70,6 @@ export async function attestPending(
       recipient: ethers.ZeroAddress,
       encodedData: encodeAttestation({
         url: document.url,
-        protocol: document.protocol,
         protocolVersion: document.protocolVersion,
         contentHash: document.contentHash,
         rawHash: document.rawHash,

@@ -14,8 +14,7 @@ party can write an independent verifier without reading our source.
 
 ## What is attested
 
-An attestation carries the URL, the protocol identifier `wuzzy/crawl-experimental`, the
-protocol version, the fetch time, and two hashes:
+An attestation carries the URL, the protocol version, the fetch time, and two hashes:
 
 - **`rawHash`** — sha256 over the exact bytes the origin served, with no normalization of any
   kind. It commits to the transfer.
@@ -93,18 +92,25 @@ vectors.
 
 ## Identifying a procedure
 
-A procedure is identified by the **pair** `(protocol, protocolVersion)`, never by the version
-alone. `wuzzy/crawl-experimental` v1 and a future stable `wuzzy/crawl` v1 are different
-procedures that happen to share a version number, and a verifier keying on the number would
-run the wrong one against a hash that then fails to reproduce. Both fields are in the
-attestation for exactly this reason.
+A procedure is identified by the pair **(schema UID, `protocolVersion`)**, never by the version
+alone. The protocol name is not an attestation field: it is a constant, and repeating it onchain
+cost 17% of every attestation's gas. The schema UID is in the attestation envelope, and
+[SCHEMA.md](SCHEMA.md) records which procedure that schema belongs to.
+
+That places the whole weight of distinguishing procedures on `protocolVersion`, because a
+schema's UID derives from its field names and so cannot change when the procedure is renamed.
+A verifier that keys on the version alone, without the schema UID, will eventually run the
+wrong procedure against a hash that then fails to reproduce.
 
 ## Freezing
 
 While the identifier carries `-experimental` nothing here is frozen: it is a demo-stage
 artifact, and no promise has been made to anyone building against it.
 
-Dropping the suffix is the freeze. From that point this document,
+Dropping the suffix is the freeze, and it **must** bump `protocolVersion` to 2: with the
+protocol name absent from the attestation, the version is the only thing that would tell a
+frozen attestation from an experimental one. A test enforces this rather than leaving it to
+memory. From that point this document,
 `contracts/canonicalize-v1.feature`, its fixtures, and the `v1` module are immutable. A
 change in behaviour after that is protocol version 2, implemented in a new module beside
 `v1`, with its own feature file and its own vectors. Version 1 stays callable indefinitely,

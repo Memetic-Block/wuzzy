@@ -562,7 +562,6 @@ describe('configurable indexes', () => {
     expect(document.attestationUid).toBe(uid);
     const attestation = encodeAttestation({
       url: document.url,
-      protocol: document.protocol,
       protocolVersion: document.protocolVersion,
       contentHash: document.contentHash,
       rawHash: document.rawHash,

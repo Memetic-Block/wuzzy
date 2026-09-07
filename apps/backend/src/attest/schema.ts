@@ -7,13 +7,24 @@ import { SchemaEncoder } from '@ethereum-attestation-service/eas-sdk';
  * an optimization: the index is public, the corpus is other people's writing,
  * and an attestation is a commitment to what was fetched rather than a copy of
  * it. `schemaCarriesNoContent` below is the check that keeps it true.
+ *
+ * A procedure is identified by (schema UID, protocolVersion). The protocol name
+ * is deliberately not a field: the schema UID already pins the shape, and
+ * carrying the name spent 17% of every attestation's gas repeating a constant.
+ *
+ * That makes one rule load-bearing. This schema's UID derives from the FIELD
+ * NAMES alone, so renaming the procedure cannot change it: the string
+ * "wuzzy/crawl-experimental" appears nowhere in SCHEMA_DEFINITION. So
+ * `protocolVersion` is the sole discriminator between procedures written
+ * against this schema, and dropping `-experimental` MUST bump it to 2. Leaving
+ * it at 1 would make frozen attestations byte-identical to experimental ones,
+ * and the freeze invisible onchain.
  */
 export const SCHEMA_DEFINITION =
-  'string url,string protocol,uint8 protocolVersion,bytes32 contentHash,bytes32 rawHash,uint64 fetchedAt';
+  'string url,uint8 protocolVersion,bytes32 contentHash,bytes32 rawHash,uint64 fetchedAt';
 
 export interface AttestationFields {
   readonly url: string;
-  readonly protocol: string;
   readonly protocolVersion: number;
   readonly contentHash: string;
   readonly rawHash: string;
@@ -25,7 +36,6 @@ const hex32 = (value: string): string => (value.startsWith('0x') ? value : `0x${
 export function encodeAttestation(fields: AttestationFields): string {
   return new SchemaEncoder(SCHEMA_DEFINITION).encodeData([
     { name: 'url', value: fields.url, type: 'string' },
-    { name: 'protocol', value: fields.protocol, type: 'string' },
     { name: 'protocolVersion', value: fields.protocolVersion, type: 'uint8' },
     { name: 'contentHash', value: hex32(fields.contentHash), type: 'bytes32' },
     { name: 'rawHash', value: hex32(fields.rawHash), type: 'bytes32' },

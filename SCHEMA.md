@@ -16,12 +16,12 @@ computed; this one specifies the record those hashes are written into.
 Attestations are written with the [Ethereum Attestation Service](https://attest.org) on Base.
 
 ```
-string url,string protocol,uint8 protocolVersion,bytes32 contentHash,bytes32 rawHash,uint64 fetchedAt
+string url,uint8 protocolVersion,bytes32 contentHash,bytes32 rawHash,uint64 fetchedAt
 ```
 
 | | |
 | --- | --- |
-| **Schema UID** | `0x2677bbe3712340b96468584bb861dc14bdacd3fd16470f5b4966461127a503ab` |
+| **Schema UID** | `0x15616641fbb8e7ee6a63f4904a622a154972e47453062c845845e1f2387f9f1a` |
 | **Resolver** | `0x0000000000000000000000000000000000000000` (none) |
 | **Revocable** | `true` |
 | **EAS** | `0x4200000000000000000000000000000000000021` |
@@ -36,8 +36,7 @@ below.
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `url` | `string` | The absolute URL fetched, after redirects. The URL is part of the canonicalization input, so it belongs in the record. |
-| `protocol` | `string` | The procedure identifier, currently `wuzzy/crawl-experimental`. |
-| `protocolVersion` | `uint8` | The version of that procedure, currently `1`. |
+| `protocolVersion` | `uint8` | Which procedure produced the hashes, currently `1`. Together with the schema UID this identifies the procedure; see "Identifying a procedure". |
 | `contentHash` | `bytes32` | sha256 over the canonical markdown. Commits to the readable content. |
 | `rawHash` | `bytes32` | sha256 over the exact bytes the origin served, with no normalization. Commits to the transfer. |
 | `fetchedAt` | `uint64` | Unix seconds when the fetch happened. Distinct from the EAS `time` field, which is when the attestation was written. |
@@ -84,7 +83,7 @@ library that can ABI-decode will do.
 ```ts
 import { ethers } from 'ethers';
 
-const TYPES = ['string', 'string', 'uint8', 'bytes32', 'bytes32', 'uint64'];
+const TYPES = ['string', 'uint8', 'bytes32', 'bytes32', 'uint64'];
 
 const eas = new ethers.Contract(
   '0x4200000000000000000000000000000000000021',
@@ -93,14 +92,14 @@ const eas = new ethers.Contract(
 );
 
 const attestation = await eas.getAttestation(uid);
-const [url, protocol, protocolVersion, contentHash, rawHash, fetchedAt] =
+const [url, protocolVersion, contentHash, rawHash, fetchedAt] =
   ethers.AbiCoder.defaultAbiCoder().decode(TYPES, attestation.data);
 ```
 
 A real decode, from the rehearsal run:
 
 ```
-schema           0x2677bbe3712340b96468584bb861dc14bdacd3fd16470f5b4966461127a503ab
+schema           0x15616641fbb8e7ee6a63f4904a622a154972e47453062c845845e1f2387f9f1a
 attester         0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
 recipient        0x0000000000000000000000000000000000000000
 revocable        true
@@ -108,7 +107,6 @@ expirationTime   0
 revocationTime   0
 
 url              https://docs.base.org/agents/guides/batch-calls
-protocol         wuzzy/crawl-experimental
 protocolVersion  1
 contentHash      0x2a9688cd036df3bb183663a67820407476f8ddd54dd3ca6e6b5c1746b5248354
 rawHash          0x3529ef8770591c740fc3e23bd21932a049b51746f2c9556d5c60eb67a9115ae2
@@ -135,11 +133,24 @@ mismatch, 2 when the URL is not indexed.
 
 ## Identifying a procedure
 
-A procedure is identified by the **pair** `(protocol, protocolVersion)`, never by the version
-alone. `wuzzy/crawl-experimental` v1 and a future stable `wuzzy/crawl` v1 are different
-procedures that happen to share a version number, and a verifier keying on the number would
-run the wrong one against a hash that then fails to reproduce. Both fields are in every
-attestation for exactly this reason.
+A procedure is identified by the pair **(schema UID, `protocolVersion`)**.
+
+The protocol name is deliberately not a field. It is a constant, and carrying it cost 17% of
+every attestation's gas to repeat the same string forever: 394,982 gas with it, 327,329
+without, measured against real EAS bytecode. The schema UID in the attestation envelope
+already says which schema, and this document says which procedure that schema belongs to.
+
+**One rule follows, and it is load-bearing.** A schema's UID derives from its field *names*,
+so renaming the procedure cannot change it: the string `wuzzy/crawl-experimental` appears
+nowhere in the schema definition. `protocolVersion` is therefore the only thing distinguishing
+two procedures written against this schema.
+
+So **dropping `-experimental` must bump `protocolVersion` to 2.** Leaving it at 1 would make
+frozen attestations byte-identical to experimental ones and the freeze invisible onchain.
+That is enforced by a test rather than left to memory: if `PROTOCOL` stops ending in
+`-experimental` while `PROTOCOL_VERSION` is still 1, the build fails.
+
+A verifier should read the pair, never the version alone.
 
 ## Registering
 
@@ -153,7 +164,7 @@ There is no registrant, no nonce and no chain id in that preimage. Three consequ
 and all three were confirmed against a forked Base mainnet:
 
 - **The UID is knowable before registration.** Computing it locally reproduces
-  `0x2677bbe3...` exactly, so registration cannot yield a surprising value.
+  `0x15616641...` exactly, so registration cannot yield a surprising value.
 - **It is the same on every chain.** Base and Base Sepolia share the UID.
 - **Registration is idempotent and unowned.** A second registration reverts `AlreadyExists`,
   including from a different account, so nobody can register "our" schema to a different
@@ -162,7 +173,7 @@ and all three were confirmed against a forked Base mainnet:
 ```sh
 cast send 0x4200000000000000000000000000000000000020 \
   "register(string,address,bool)" \
-  "string url,string protocol,uint8 protocolVersion,bytes32 contentHash,bytes32 rawHash,uint64 fetchedAt" \
+  "string url,uint8 protocolVersion,bytes32 contentHash,bytes32 rawHash,uint64 fetchedAt" \
   0x0000000000000000000000000000000000000000 true \
   --private-key "$ATTESTER_PRIVATE_KEY" --rpc-url https://mainnet.base.org
 ```
@@ -178,13 +189,14 @@ Measured against forked Base mainnet, 200 attestations across 4 `multiAttest` ba
 
 | | |
 | --- | --- |
-| Gas per attestation | **388,188** |
-| Stored payload | 352 bytes |
-| Gas per batch of 50 | 19.4M, about 4.9% of a 400M block |
+| Gas per attestation | **327,329** |
+| Stored payload | 288 bytes |
+| Gas per batch of 50 | 16.4M, about 4.1% of a 400M block |
 | L1 data fee share | 0.02% of total |
 
 Cost is dominated by storing the payload: a cold `SSTORE` is 22,100 gas per word, and 352
-bytes is 11 words. **It scales with what the schema stores**, which is mostly the `url` string.
+bytes is 9 words. **It scales with what the schema stores**, which is now almost entirely the
+`url` string; dropping the constant `protocol` string saved 67,653 gas per attestation.
 That accounts for the figure almost exactly: 11 words of payload on top of the 146,331 gas EAS
 charges for an attestation regardless of contents (measured under "Roadmap" below).
 Because the L1 data fee is negligible on Base, calldata batching tweaks do not move the total;
@@ -202,7 +214,7 @@ at 0.006 gwei and $2505/ETH.
 
 | schema | payload | gas each | cost for 4555 | saving |
 | --- | --- | --- | --- | --- |
-| current, all fields separate | 384 B | 394,982 | $27.04 | - |
+| current, after dropping `protocol` | 288 B | 327,329 | $22.41 | - |
 | `bytes32 urlHash` plus the rest | 160 B | 236,972 | $16.22 | 40% |
 | `bytes32 attestationHash`, everything combined | 32 B | 146,331 | $10.02 | 63% |
 

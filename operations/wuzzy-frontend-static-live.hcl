@@ -59,7 +59,7 @@ job "wuzzy-frontend-static-live" {
         # Absent values render as a stated "published at cutover" note rather
         # than a dead link, so the page is complete before these exist.
         # X402_PAY_TO    = ""
-        # EAS_SCHEMA_URL = "https://base.easscan.org/schema/view/0x2677bbe3712340b96468584bb861dc14bdacd3fd16470f5b4966461127a503ab"
+        # EAS_SCHEMA_URL = "https://base.easscan.org/schema/view/0x15616641fbb8e7ee6a63f4904a622a154972e47453062c845845e1f2387f9f1a"
         # BAZAAR_URL     = ""
       }
 
