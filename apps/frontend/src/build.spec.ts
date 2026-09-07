@@ -243,8 +243,34 @@ describe('free search box', () => {
     const script = /src="(\/search\.[0-9a-f]{8}\.js)"/.exec(index)![1]!;
     const source = await read(script);
     // The paid contract's scenarios are what /search is for. The box is free,
-    // so it must not be able to spend anyone's money by accident.
-    expect(source).toContain("fetch('/api/web-search'");
+    // so it must not be able to spend anyone's money by accident. The endpoint
+    // is rendered onto the form rather than hardcoded, so the guarantee is
+    // checked on both halves: what the page asks for, and what the script does
+    // when the attribute is missing.
+    expect(index).toContain('data-endpoint="/api/web-search"');
+    expect(source).toContain("form.getAttribute('data-endpoint') || '/api/web-search'");
+    expect(source).toContain('fetch(ENDPOINT');
     expect(source).not.toContain("'/api/search'");
+  });
+
+  it('sends the box at another origin when the site is served statically', async () => {
+    // A Cloudflare Pages build has no nginx to proxy /api, so the endpoint has
+    // to be absolute. Same build, one variable.
+    const built = Bun.spawn([process.execPath, 'build.ts'], {
+      cwd: appDir,
+      env: {
+        ...process.env,
+        SEARCH_ENABLED: 'true',
+        WEB_SEARCH_URL: 'https://api.wuzzy.io/web-search',
+      },
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    expect(await built.exited).toBe(0);
+
+    const index = await read('index.html');
+    expect(index).toContain('data-endpoint="https://api.wuzzy.io/web-search"');
+    // Still the free route, wherever it is pointed.
+    expect(index).not.toContain('data-endpoint="https://api.wuzzy.io/search"');
   });
 });

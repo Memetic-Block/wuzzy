@@ -182,7 +182,7 @@ const Code = ({ label, text }: { label: string; text: string }) => (
  */
 const SearchBox = () => (
   <section class="mt-12">
-    <form id="search-form" class="flex flex-wrap gap-2">
+    <form id="search-form" data-endpoint={site.webSearchUrl} class="flex flex-wrap gap-2">
       <input
         id="query"
         name="query"

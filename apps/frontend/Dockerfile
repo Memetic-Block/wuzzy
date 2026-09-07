@@ -36,6 +36,32 @@ ARG BAZAAR_URL
 ARG SEARCH_ENABLED
 RUN bun apps/frontend/build.ts
 
+# Deploy stage: the same static build, shipped to Cloudflare Pages instead of
+# baked into an nginx image.
+#
+# The site.config values are read at container start rather than at image build
+# time, which is the whole point: one image deploys both stage and live, and the
+# Nomad job supplies the difference. That is why this stage cannot reuse the
+# `build` stage above, whose ARGs are fixed when the image is built.
+FROM docker.io/oven/bun:1-alpine AS deploy
+WORKDIR /app
+
+COPY package.json bun.lock ./
+COPY apps/backend/package.json ./apps/backend/
+COPY apps/frontend/package.json ./apps/frontend/
+COPY apps/admin/package.json ./apps/admin/
+COPY packages/static-site/package.json ./packages/static-site/
+RUN bun install --frozen-lockfile --linker=hoisted
+
+COPY tsconfig.json tsconfig.base.json ./
+COPY packages/static-site ./packages/static-site
+COPY apps/frontend ./apps/frontend
+
+# CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID come from Vault via the job;
+# PROJECT_NAME selects the Pages project. Nothing here defaults them: a missing
+# value must fail the deploy rather than publish to the wrong place.
+CMD ["sh", "-c", "set -e; bun apps/frontend/build.ts; bunx wrangler@3 pages deploy apps/frontend/dist --project-name=\"$PROJECT_NAME\" --commit-hash=\"$COMMIT_SHA\" --branch=\"$PAGES_BRANCH\""]
+
 FROM docker.io/library/nginx:1-alpine
 # nginx.conf is an envsubst template; ${BACKEND_ORIGIN} is filled in at startup.
 # The entrypoint renders /etc/nginx/templates/*.template into the output dir below.

@@ -70,7 +70,15 @@ jobs:
       packages: write
     strategy:
       matrix:
-        app: [backend, frontend, admin]
+        include:
+          - { app: backend, image: backend }
+          - { app: frontend, image: frontend }
+          - { app: admin, image: admin }
+          # The site ships twice from one Dockerfile: the default stage is the
+          # nginx runtime image, and `deploy` is the stage that renders the
+          # pages and pushes them to Cloudflare Pages. operations/ runs the
+          # second one as a Nomad batch job.
+          - { app: frontend, image: frontend-deploy, target: deploy }
     steps:
       - uses: actions/checkout@v5
 
@@ -87,7 +95,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ github.repository }}-${{ matrix.app }}
+          images: ${{ env.REGISTRY }}/${{ github.repository }}-${{ matrix.image }}
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha,format=long
@@ -104,6 +112,9 @@ jobs:
         with:
           context: .
           file: apps/${{ matrix.app }}/Dockerfile
+          # Empty for every entry but frontend-deploy, which means the default
+          # (final) stage, so the runtime images are unaffected.
+          target: ${{ matrix.target }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

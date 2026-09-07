@@ -16,6 +16,10 @@
 
   if (!form) return;
 
+  // Rendered by the build. Relative behind the site's own nginx, absolute when
+  // the site is served statically and the API is on another origin.
+  var ENDPOINT = form.getAttribute('data-endpoint') || '/api/web-search';
+
   var PAGE = 10;
   // The query a page belongs to, so a stale response cannot repaint the
   // results of a newer one, and so paging pages what is on screen.
@@ -69,7 +73,7 @@
     status.textContent = 'Searching...';
     var started = Date.now();
 
-    return fetch('/api/web-search', {
+    return fetch(ENDPOINT, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ query: current.query, topK: PAGE, offset: current.offset }),

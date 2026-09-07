@@ -75,6 +75,16 @@ export const site = {
    */
   searchEnabled: env.SEARCH_ENABLED === 'true',
 
+  /**
+   * Where the box posts. Relative by default, because the site's own nginx
+   * proxies /api to the free backend and a same-origin request needs no CORS.
+   * A static host has no such proxy, so a Cloudflare Pages build sets this to
+   * the API's absolute origin and the backend's WEB_SEARCH_ORIGINS has to name
+   * this site. It is deliberately not derived from `apiOrigin`: that one points
+   * at the metered API for the quickstart, and the box uses the free route.
+   */
+  webSearchUrl: env.WEB_SEARCH_URL ?? '/api/web-search',
+
   // legal@ and dmca@ are the two addresses the legacy site published, so they
   // are the two known to exist. Point `contactEmail` at a friendlier alias once
   // there is one; it is the footer's "Contact" link and nothing else.
