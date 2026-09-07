@@ -9,7 +9,8 @@ gate, over x402. A paying agent gets results with a provenance block it can veri
 without trusting us.
 
 - **Backend** — [apps/backend](apps/backend/): NestJS (TypeScript) on the Bun runtime, TypeORM
-  against Postgres + pgvector. Pipeline stages are CLI commands, not queue workers.
+  against Postgres + pgvector. Pipeline stages are CLI commands, not queue workers. Its
+  [README](apps/backend/README.md) documents the REST API.
 - **Frontend** — [apps/frontend](apps/frontend/): the public site at `wuzzy.io`, written as JSX
   templates and pre-rendered to static HTML at build time by
   [build.ts](apps/frontend/build.ts), styled with Tailwind, served by nginx in production.
@@ -346,6 +347,6 @@ needed.
 ├── compose.yml                 Local backing services (pgvector)
 ├── .github/workflows/ci.yaml   Test + publish images
 └── apps/
-    ├── backend/                NestJS API, canonicalizer, schema
+    ├── backend/                NestJS API (README documents the REST surface)
     └── frontend/               JSX → static HTML, nginx image
 ```
