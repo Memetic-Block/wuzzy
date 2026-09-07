@@ -8,16 +8,7 @@ import { site } from './site.config';
  * white, uppercase headings, 2px rules, and no accent colour. Nothing else
  * came across, so there is no framework here and no client-side router.
  */
-export const Layout = ({
-  title,
-  /** Large centred mark, as the legacy site did on its own home page only. */
-  hero = false,
-  children,
-}: {
-  title: string;
-  hero?: boolean;
-  children?: Children;
-}) => (
+export const Layout = ({ title, children }: { title: string; children?: Children }) => (
   <html lang="en">
     <head>
       <meta charset="utf-8" />
@@ -39,23 +30,22 @@ export const Layout = ({
 
       <link rel="stylesheet" href="/styles.css" />
     </head>
-    <body class="bg-paper text-ink flex min-h-screen flex-col px-4">
-      <header class={hero ? 'pt-16 pb-8 text-center' : 'py-6'}>
-        <a href="/" class={hero ? 'block no-underline' : 'inline-flex items-center gap-3 no-underline'}>
-          <img
-            src="/brand/wuzzy-logo.png"
-            alt=""
-            width={hero ? 128 : 32}
-            height={hero ? 128 : 32}
-            class={hero ? 'mx-auto size-32' : 'size-8'}
-          />
-          <span class={hero ? 'mt-4 block text-2xl font-bold uppercase' : 'text-lg font-semibold'}>
-            {site.name}
-          </span>
+    <body class="bg-paper text-ink flex min-h-screen flex-col px-6">
+      {/* One bar on every page: mark and name left, where a reader looks first
+          for whose site this is, and the way out to the docs on the right. */}
+      <header class="border-ink mx-auto flex w-full max-w-5xl items-center justify-between gap-4 border-b-2 py-4">
+        <a href="/" class="inline-flex items-center gap-3 no-underline">
+          <img src="/brand/wuzzy-logo.png" alt="" width="32" height="32" class="size-8" />
+          <span class="text-lg font-bold uppercase">{site.name}</span>
         </a>
+        <nav class="flex items-center gap-5 text-sm">
+          <a href={site.docsOrigin} class="underline">
+            Docs
+          </a>
+        </nav>
       </header>
 
-      <main class="mx-auto w-full max-w-[76ch] flex-1 pb-16">{children}</main>
+      <main class="mx-auto w-full max-w-5xl flex-1 pt-10 pb-16">{children}</main>
 
       <Footer />
     </body>

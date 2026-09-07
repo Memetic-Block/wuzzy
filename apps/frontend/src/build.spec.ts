@@ -253,6 +253,92 @@ describe('free search box', () => {
     expect(source).not.toContain("'/api/search'");
   });
 
+  it('puts the brand and the way out to the docs in one bar on every page', async () => {
+    const built = Bun.spawn([process.execPath, 'build.ts'], {
+      cwd: appDir,
+      env: { ...process.env },
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    expect(await built.exited).toBe(0);
+
+    // Every page, not just the home page: a reader who lands on /terms needs
+    // to know whose site it is and how to get out of it.
+    for (const page of ['index.html', 'privacy.html', 'terms.html']) {
+      const html = await read(page);
+      const header = /<header[\s\S]*?<\/header>/.exec(html)?.[0] ?? '';
+      expect(header).toContain('/brand/wuzzy-logo.png');
+      expect(header).toContain(site.name);
+      expect(header).toContain(site.docsOrigin);
+    }
+  });
+
+  it('offers a sample search only when the box is on', async () => {
+    const withBox = Bun.spawn([process.execPath, 'build.ts'], {
+      cwd: appDir,
+      env: { ...process.env, SEARCH_ENABLED: 'true' },
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    expect(await withBox.exited).toBe(0);
+
+    const on = await read('index.html');
+    expect(on).toContain(`data-samples="${site.sampleQueries.join('|')}"`);
+    // The input stays empty, so a reader can type without clearing it first.
+    expect(on).not.toContain(`value="${site.sampleQueries[0]}"`);
+
+    const withoutBox = Bun.spawn([process.execPath, 'build.ts'], {
+      cwd: appDir,
+      env: { ...process.env },
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    expect(await withoutBox.exited).toBe(0);
+    expect(await read('index.html')).not.toContain('data-samples');
+  });
+
+  it('bounds the demo so the page below it cannot move', async () => {
+    const built = Bun.spawn([process.execPath, 'build.ts'], {
+      cwd: appDir,
+      env: { ...process.env, SEARCH_ENABLED: 'true' },
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    expect(await built.exited).toBe(0);
+    const index = await read('index.html');
+
+    // Fixed height, not max height. A max height still grows from two sample
+    // rows to five result rows, which shoves the commissioning and proof
+    // sections down the page exactly when a reader is deciding if this is real.
+    expect(index).toContain('h-[34rem]');
+    expect(index).not.toMatch(/max-h-\[34rem\]/);
+    expect(index).toContain('overflow-y-auto');
+
+    // No paging. Five results is the demonstration; the rest is what the
+    // metered API sells, so there is nothing to page to.
+    for (const gone of ['id="pager"', 'id="prev"', 'id="next"', 'id="page-of"']) {
+      expect(index).not.toContain(gone);
+    }
+
+    // Exactly one promotional thing near the search.
+    const module_ = /<section class="mt-12">[\s\S]*?<\/section>/.exec(index)?.[0] ?? '';
+    expect(module_).toContain('Commission your own index');
+    expect(module_.match(/bg-ink text-paper/g)?.length).toBe(2); // submit + the one CTA
+  });
+
+  it('caps the demo at five results and two samples', async () => {
+    const source = await Bun.file(`${appDir}/public/search.js`).text();
+    expect(source).toContain('var SAMPLE_COUNT = 2');
+    expect(source).toContain('var RESULT_COUNT = 5');
+    // The wording that keeps the cap honest rather than looking like a bug.
+    expect(source).toContain('agents get full results through the');
+    expect(source).toContain('#quickstart');
+    // Both bounded states are spelled out rather than falling through to a
+    // generic error a reader would read as breakage.
+    expect(source).toContain('The free window is rate-limited for humans');
+    expect(source).toContain('No results in index #1 for that');
+  });
+
   it('sends the box at another origin when the site is served statically', async () => {
     // A Cloudflare Pages build has no nginx to proxy /api, so the endpoint has
     // to be absolute. Same build, one variable.

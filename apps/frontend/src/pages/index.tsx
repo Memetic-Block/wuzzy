@@ -97,13 +97,13 @@ const HOW_IT_VERIFIES = [
 ];
 
 export default () => (
-  <Layout title="Wuzzy" hero>
-    <h1 class="text-xl leading-relaxed font-bold normal-case">{site.tagline}</h1>
+  <Layout title="Wuzzy">
+    <h1 class="text-3xl leading-tight font-bold normal-case">{site.tagline}</h1>
     <p class="text-ink-muted mt-4 leading-relaxed">{site.support}</p>
 
     {site.searchEnabled ? <SearchBox /> : null}
 
-    <Section title="Agent quickstart">
+    <Section id="quickstart" title="Agent quickstart">
       <p class="leading-relaxed">
         There is no account and no API key. Ask, get a 402 with the price, pay, and ask again. One
         query costs {site.queryPrice} in USDC on {site.networkLabel}.
@@ -154,8 +154,8 @@ export default () => (
   </Layout>
 );
 
-const Section = ({ title, children }: { title: string; children?: Children }) => (
-  <section class="mt-16">
+const Section = ({ id, title, children }: { id?: string; title: string; children?: Children }) => (
+  <section id={id} class="mt-16">
     <h2 class="border-ink mb-6 border-b-2 pb-2 text-base font-bold">{title}</h2>
     {children}
   </section>
@@ -176,44 +176,70 @@ const Code = ({ label, text }: { label: string; text: string }) => (
 );
 
 /**
- * The free, rate-limited box for people rather than agents. Off unless
- * `SEARCH_ENABLED=true` at build time: it posts to /web-search, which is a
- * separate unmetered route, so nothing here touches the paid contract.
+ * The free box, as a bounded demo rather than a search engine.
+ *
+ * The case is a FIXED height, not a max height. A max height still grows from
+ * two sample rows to five result rows, which shoves the commissioning and
+ * proof sections down the page at the exact moment a reader is deciding
+ * whether any of this is real. Fixed height costs some whitespace when the
+ * results are short and buys a page that never moves under the reader.
+ *
+ * There is no pagination. Five results is the demonstration; the full set is
+ * what the metered API sells, and the footer line says so rather than
+ * inviting a reader to page through a free endpoint.
+ *
+ * Off unless `SEARCH_ENABLED=true` at build time. It posts to /web-search,
+ * a separate unmetered route, so nothing here touches the paid contract.
  */
 const SearchBox = () => (
   <section class="mt-12">
-    <form id="search-form" data-endpoint={site.webSearchUrl} class="flex flex-wrap gap-2">
-      <input
-        id="query"
-        name="query"
-        required
-        autocomplete="off"
-        placeholder="Ask the index something"
-        class="border-ink min-w-0 flex-1 border-2 px-3 py-2"
-      />
-      <button type="submit" class="border-ink bg-ink text-paper cursor-pointer border-2 px-4 py-2">
-        Search
-      </button>
-    </form>
+    <div class="border-ink flex h-[34rem] flex-col border-2">
+      {/* Head stays put: scrolling results must never take the input with them. */}
+      <div class="border-ink border-b-2 p-4">
+        <form
+          id="search-form"
+          data-endpoint={site.webSearchUrl}
+          data-samples={site.sampleQueries.join('|')}
+          data-commission={`${site.docsOrigin}/guide/indexes`}
+          class="flex flex-wrap gap-2"
+        >
+          <input
+            id="query"
+            name="query"
+            required
+            autocomplete="off"
+            placeholder="Search the Base docs"
+            class="border-ink min-w-0 flex-1 border-2 px-3 py-2"
+          />
+          <button
+            type="submit"
+            class="border-ink bg-ink text-paper cursor-pointer border-2 px-4 py-2"
+          >
+            Search
+          </button>
+        </form>
+        <p class="text-ink-muted mt-3 text-sm">{site.searchCaption}</p>
+      </div>
 
-    <p id="status" class="text-ink-muted mt-3 text-sm"></p>
-    <div id="results" class="mt-6"></div>
-
-    <div id="pager" class="mt-6 flex items-center gap-2" hidden>
-      <button
-        id="prev"
-        class="border-ink cursor-pointer border-2 px-3 py-1 text-sm disabled:cursor-default disabled:opacity-40"
-      >
-        Previous
-      </button>
-      <button
-        id="next"
-        class="border-ink cursor-pointer border-2 px-3 py-1 text-sm disabled:cursor-default disabled:opacity-40"
-      >
-        Next
-      </button>
-      <span id="page-of" class="text-ink-muted text-sm"></span>
+      {/* The only thing that scrolls. */}
+      <div class="flex-1 overflow-y-auto p-4">
+        <p id="results-caption" class="text-ink-muted mb-4 text-sm">
+          Sample results &mdash; captured from the live API
+        </p>
+        <div id="results"></div>
+        <p id="results-more" class="text-ink-muted mt-4 text-sm" hidden></p>
+      </div>
     </div>
+
+    {/* The one promotional thing allowed near the search. */}
+    <p class="mt-4">
+      <a
+        href={`${site.docsOrigin}/guide/indexes`}
+        class="border-ink bg-ink text-paper inline-block border-2 px-4 py-2 no-underline"
+      >
+        Commission your own index
+      </a>
+    </p>
 
     <script src="/search.js" defer></script>
   </section>

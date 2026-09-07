@@ -1,18 +1,18 @@
-// The free human search box. Posts to /web-search, which is unmetered and
-// rate-limited by IP; the paid /search contract is untouched by anything here.
+// The free human search box, as a bounded demonstration.
+//
+// Deliberately not a search engine: five results, no paging, and a line saying
+// where the rest live. The paid /search contract is untouched by anything here;
+// this posts to /web-search, which is unmetered and rate-limited by IP.
 //
 // Plain fetch rather than a framework: the route answers the same JSON a paying
 // agent gets, so this page needs no second, HTML-shaped endpoint beside it. The
-// attestation link on each result is the reason the box exists at all.
+// receipt line on each result is the reason the box exists at all.
 (function () {
   var form = document.getElementById('search-form');
   var input = document.getElementById('query');
-  var status = document.getElementById('status');
+  var caption = document.getElementById('results-caption');
   var results = document.getElementById('results');
-  var pager = document.getElementById('pager');
-  var prev = document.getElementById('prev');
-  var next = document.getElementById('next');
-  var pageOf = document.getElementById('page-of');
+  var more = document.getElementById('results-more');
 
   if (!form) return;
 
@@ -20,10 +20,10 @@
   // the site is served statically and the API is on another origin.
   var ENDPOINT = form.getAttribute('data-endpoint') || '/api/web-search';
 
-  var PAGE = 10;
-  // The query a page belongs to, so a stale response cannot repaint the
-  // results of a newer one, and so paging pages what is on screen.
-  var current = { query: '', offset: 0 };
+  // Two on arrival, five for a real search. The cap is the demonstration's
+  // shape, not a page size: there is nothing to page to.
+  var SAMPLE_COUNT = 2;
+  var RESULT_COUNT = 5;
 
   function escape(value) {
     return String(value == null ? '' : value).replace(/[&<>"']/g, function (c) {
@@ -31,52 +31,70 @@
     });
   }
 
-  function provenance(p) {
-    var attested = p.attestationUrl
-      ? '<a class="underline" href="' + escape(p.attestationUrl) + '" rel="noreferrer noopener" target="_blank">attestation</a>'
-      : '<span class="text-ink-muted">not yet attested onchain</span>';
-    return (
-      '<div class="mt-2 bg-paper-alt px-3 py-2 text-xs">' +
-      '<div>' + escape(p.protocol) + ' v' + escape(p.protocolVersion) +
-      ' &middot; fetched ' + escape(p.fetchedAt) + '</div>' +
-      '<div class="break-all">contentHash ' + escape(p.contentHash) + '</div>' +
-      '<div>' + attested + '</div>' +
-      '</div>'
-    );
+  // A receipt is only useful if it is checkable, so the hash is shown in a form
+  // a reader can compare against an attestation rather than merely admire.
+  function shortHash(hash) {
+    var hex = String(hash || '').replace(/^0x/, '');
+    return hex ? '0x…' + hex.slice(-4) : 'unknown';
   }
 
+  function shortDate(value) {
+    var text = String(value || '');
+    return text.length >= 10 ? text.slice(0, 10) : text;
+  }
+
+  function receipt(p) {
+    var parts = [];
+    parts.push(
+      p.attestationUid
+        ? 'attested ✓'
+        : '<span class="text-ink-muted">not yet attested</span>',
+    );
+    parts.push('sha256 ' + escape(shortHash(p.contentHash)));
+    parts.push('fetched ' + escape(shortDate(p.fetchedAt)));
+    if (p.attestationUrl) {
+      parts.push(
+        '<a class="underline" href="' +
+          escape(p.attestationUrl) +
+          '" rel="noreferrer noopener" target="_blank">view attestation</a>',
+      );
+    }
+    return '<p class="text-ink-muted mt-1 font-mono text-xs">' + parts.join(' · ') + '</p>';
+  }
+
+  // A dense record, not a card: title, one line of context, one line of proof.
   function render(items) {
     results.innerHTML = items
       .map(function (r) {
         return (
-          '<article class="mb-8">' +
-          '<h3 class="font-bold">' +
-          '<a class="underline" href="' + escape(r.url) + '" rel="noreferrer noopener" target="_blank">' +
-          escape(r.title || r.url) + '</a></h3>' +
-          '<div class="text-sm text-ink-muted break-all">' + escape(r.url) +
-          ' &middot; score ' + r.score.toFixed(4) + '</div>' +
-          '<p class="mt-1">' + escape(r.snippet) + '</p>' +
-          provenance(r.provenance) +
+          '<article class="border-ink/20 mb-4 border-b pb-4 last:border-0">' +
+          '<h3 class="font-bold"><a class="underline" href="' +
+          escape(r.url) +
+          '" rel="noreferrer noopener" target="_blank">' +
+          escape(r.title || r.url) +
+          '</a></h3>' +
+          '<p class="mt-1 truncate text-sm">' +
+          escape(r.snippet) +
+          '</p>' +
+          receipt(r.provenance) +
           '</article>'
         );
       })
       .join('');
   }
 
-  function clear(message) {
-    pager.hidden = true;
-    results.innerHTML = '';
-    status.textContent = message;
+  function say(html) {
+    results.innerHTML = '<p class="text-sm leading-relaxed">' + html + '</p>';
+    more.hidden = true;
   }
 
-  function run() {
-    status.textContent = 'Searching...';
-    var started = Date.now();
+  function run(query, isSample) {
+    var want = isSample ? SAMPLE_COUNT : RESULT_COUNT;
 
     return fetch(ENDPOINT, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ query: current.query, topK: PAGE, offset: current.offset }),
+      body: JSON.stringify({ query: query, topK: want, offset: 0 }),
     })
       .then(function (response) {
         return response.json().then(function (parsed) {
@@ -84,48 +102,62 @@
         });
       })
       .then(function (out) {
-        var elapsed = Date.now() - started;
-
-        if (out.status === 429) {
-          clear('That is a lot of searching. Try again in a moment.');
-          return;
-        }
-        if (out.status === 404) {
-          // The site was built with the box on against an API that has the
-          // free route off. Say which, rather than looking broken.
-          clear('Free search is not enabled on this endpoint.');
-          return;
-        }
+        // A sample nobody asked for must not report its own failure: an
+        // unreachable or throttled API should leave a quiet empty case rather
+        // than blame the reader for the site's opening move.
         if (out.status !== 200) {
-          clear('Error ' + out.status + ': ' + (out.body.error || 'request failed'));
-          return;
+          if (isSample) return say('');
+          if (out.status === 429) {
+            return say(
+              'The free window is rate-limited for humans. Agents query without limits ' +
+                'through the <a class="underline" href="#quickstart">metered API</a>.',
+            );
+          }
+          if (out.status === 404) {
+            return say('Free search is not enabled on this endpoint.');
+          }
+          return say('Error ' + out.status + ': ' + escape(out.body.error || 'request failed'));
         }
 
         var items = out.body.results || [];
-        var offset = out.body.offset || 0;
-        // `total` is a floor when the arms were cut off at the retrieval
-        // ceiling, so say "or more" rather than claim a count we do not have.
-        var total = out.body.total || 0;
-        var more = out.body.exhaustive === false ? '+' : '';
+        caption.textContent = isSample
+          ? 'Sample results — captured from the live API'
+          : 'Results for "' + query + '" — index #1';
 
         if (items.length === 0) {
-          clear(offset > 0 ? 'No further results' : 'No results');
-          return;
+          if (isSample) return say('');
+          return say(
+            'No results in index #1 for that — it covers the Base ecosystem’s docs. ' +
+              'Want other sources searchable? ' +
+              '<a class="underline" href="' +
+              escape(form.getAttribute('data-commission') || '#') +
+              '">Commission an index.</a>',
+          );
         }
 
-        status.textContent =
-          'Showing ' + (offset + 1) + '-' + (offset + items.length) +
-          ' of ' + total + more + ' in ' + elapsed + ' ms';
         render(items);
 
-        prev.disabled = offset === 0;
-        next.disabled = !out.body.hasMore;
-        pageOf.textContent = 'Page ' + (Math.floor(offset / PAGE) + 1);
-        pager.hidden = false;
-        if (offset > 0) results.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        // `total` is a floor when the arms were cut off at the retrieval
+        // ceiling, so say "or more" rather than claim a count we do not have.
+        var total = out.body.total || items.length;
+        var floor = out.body.exhaustive === false ? '+' : '';
+        if (total > items.length) {
+          more.innerHTML =
+            'Top ' +
+            items.length +
+            ' of ' +
+            total +
+            floor +
+            ' — agents get full results through the ' +
+            '<a class="underline" href="#quickstart">metered API</a>';
+          more.hidden = false;
+        } else {
+          more.hidden = true;
+        }
       })
-      .catch(function (error) {
-        clear('Request failed: ' + error.message);
+      .catch(function () {
+        if (!isSample) say('Request failed. Try again in a moment.');
+        else say('');
       });
   }
 
@@ -133,22 +165,13 @@
     event.preventDefault();
     var query = input.value.trim();
     if (!query) return;
-
-    // A new query always starts at the first page.
-    current = { query: query, offset: 0 };
-    results.innerHTML = '';
-    pager.hidden = true;
-    run();
+    run(query, false);
   });
 
-  prev.addEventListener('click', function () {
-    if (current.offset === 0) return;
-    current.offset = Math.max(0, current.offset - PAGE);
-    run();
-  });
-
-  next.addEventListener('click', function () {
-    current.offset = current.offset + PAGE;
-    run();
-  });
+  // One sample on arrival, so the case shows what a result looks like, receipt
+  // included, before anyone types.
+  var samples = (form.getAttribute('data-samples') || '').split('|').filter(Boolean);
+  if (samples.length) {
+    run(samples[Math.floor(Math.random() * samples.length)], true);
+  }
 })();

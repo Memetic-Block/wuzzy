@@ -44,11 +44,11 @@ export const site = {
   name: 'Wuzzy',
   origin: env.SITE_ORIGIN ?? 'https://wuzzy.io',
   apiOrigin: env.API_ORIGIN ?? 'https://api.wuzzy.io',
+  docsOrigin: env.DOCS_ORIGIN ?? 'https://docs.wuzzy.io',
 
-  tagline:
-    'A search index for AI agents, where every result carries onchain proof of what was crawled and when.',
+  tagline: 'Wuzzy is provable, decentralized search',
   support:
-    'Wuzzy crawls in the open, canonicalizes each page through a pinned public procedure, and attests the resulting hash on Base. Results carry the hash, so a paying agent can check what it bought instead of trusting us.',
+    'Every search result carries an onchain receipt: what was crawled, when, and proof nobody has rearranged it since.',
 
   description:
     'A search index for AI agents. Keyless and metered over x402, with onchain provenance on every result.',
@@ -74,6 +74,31 @@ export const site = {
    * against an API that has it off renders a box that answers 404.
    */
   searchEnabled: env.SEARCH_ENABLED === 'true',
+
+  /**
+   * What the box searches for on arrival, picked at random, so the page shows
+   * real results with real provenance instead of an empty input. Every one of
+   * these was checked against the corpus: a sample that returns nothing reads
+   * as a broken product rather than as an empty index.
+   */
+  /**
+   * What the free box is actually searching. Named here rather than in the
+   * markup because it describes a specific index the operator commissioned,
+   * and it stops being true the day that changes.
+   */
+  searchCaption:
+    "You're searching index #1, the Base ecosystem's documentation, commissioned and operated by us. Free for demonstration.",
+
+  sampleQueries: [
+    'deploy a smart contract',
+    'account abstraction',
+    'x402 payments',
+    'gas estimation',
+    'smart wallet',
+    'onchain identity',
+    'viem wallet client',
+    'paymaster',
+  ],
 
   /**
    * Where the box posts. Relative by default, because the site's own nginx
