@@ -25,6 +25,9 @@ protocol version, the fetch time, and two hashes:
 
 The content itself never goes onchain.
 
+[SCHEMA.md](SCHEMA.md) specifies the record these fields are written into: the EAS schema, its
+UID, the envelope, and how to decode an attestation without the EAS SDK.
+
 ## The canonicalization procedure, version 1
 
 Given the bytes of a fetched resource and the URL it was fetched from:

@@ -25,6 +25,9 @@ without trusting us.
 They are published protocol artifacts: third parties build independent verifiers against
 them. Only hashes and metadata go onchain, never content.
 
+[SCHEMA.md](SCHEMA.md) is the other half: what an attestation looks like onchain, its EAS
+schema and UID, and how to decode one without the EAS SDK or our source.
+
 ## Contracts are the definition of done
 
 Gherkin feature files in [contracts/](contracts/) are the spec of record. A work item is done
@@ -344,6 +347,7 @@ needed.
 ├── contracts/                  Gherkin feature files: the definition of done
 ├── fixtures/canonicalize-v1/   Conformance vectors for the pinned hash procedure
 ├── VERIFY.md                   Prose spec of that procedure
+├── SCHEMA.md                   The onchain attestation schema and how to read one
 ├── compose.yml                 Local backing services (pgvector)
 ├── .github/workflows/ci.yaml   Test + publish images
 └── apps/
