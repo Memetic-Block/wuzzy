@@ -10,9 +10,9 @@ without trusting us.
 
 - **Backend** — [apps/backend](apps/backend/): NestJS (TypeScript) on the Bun runtime, TypeORM
   against Postgres + pgvector. Pipeline stages are CLI commands, not queue workers.
-- **Frontend** — [apps/frontend](apps/frontend/): HTMX pages written as JSX templates,
-  pre-rendered to static HTML at build time by [build.ts](apps/frontend/build.ts), styled with
-  Tailwind, served by nginx in production.
+- **Frontend** — [apps/frontend](apps/frontend/): the public site at `wuzzy.io`, written as JSX
+  templates and pre-rendered to static HTML at build time by
+  [build.ts](apps/frontend/build.ts), styled with Tailwind, served by nginx in production.
 - **CI** — [.github/workflows/ci.yaml](.github/workflows/ci.yaml): installs, typechecks, runs
   the scenario suite against a pgvector service, and publishes both images to GHCR.
 
@@ -96,11 +96,85 @@ bun run wuzzy crawl https://docs.base.org/ --max=60
 bun run wuzzy embed
 
 bun run dev:backend      # open API on :3000
-bun run dev:frontend     # search UI on :8080
+bun run dev:frontend     # site on :8080
 ```
+
+The homepage ships without a search box. To get one in dev, turn it on at both ends:
+`WEB_SEARCH_ENABLED=true bun run dev:backend` and `SEARCH_ENABLED=true bun run dev:frontend`.
 
 To see the metered path, run a second backend with `X402_ENABLED=true` and
 `X402_FACILITATOR_URL=http://127.0.0.1:39600`, then point the demo agent at it.
+
+## Public site
+
+[apps/frontend](apps/frontend/) is the marketing and evidence site: what Wuzzy claims, the
+402 handshake written out in full, and a row of links a reviewer can click to check the
+claims. The brand carried over from the previous wuzzy.io; none of its architecture did.
+
+Everything the pages render that is not prose lives in
+[site.config.ts](apps/frontend/src/site.config.ts), including the two receipts that do not
+exist until they are registered. A `null` href renders as a stated "published at cutover"
+note rather than a dead link, so the page is honest either way and filling one in is an edit
+plus a rebuild.
+
+**Its config is read at build time, not at run time.** The values are baked into the static
+HTML, so they are Docker build args rather than container environment
+(see [apps/frontend/Dockerfile](apps/frontend/Dockerfile)):
+
+| Build arg | Default | What it sets |
+| --------- | ------- | ------------ |
+| `SITE_ORIGIN` | `https://wuzzy.io` | Canonical URL, og: tags |
+| `API_ORIGIN` | `https://api.wuzzy.io` | The endpoint the quickstart depicts |
+| `X402_PRICE` | `$0.01` | The price in copy and the atomic amount in the sample 402 |
+| `X402_NETWORK` | `base` | Network name in copy and in the sample 402 |
+| `X402_PAY_TO` | unset, renders `0x...` | Receiving address in the sample 402 |
+| `EAS_SCHEMA_URL` | unset | Receipts row |
+| `BAZAAR_URL` | unset | Receipts row |
+| `SEARCH_ENABLED` | `false` | Renders the free human search box |
+
+The price is never typed into copy: it is read from `X402_PRICE` and converted to atomic
+USDC once, so the sentence, the `maxAmountRequired` in the sample 402, and the client's
+`--max-amount` cannot disagree with each other or with the meter.
+
+### The free search box
+
+A browser cannot sign an x402 payment, so the box on the homepage posts to **`/web-search`**,
+which is a separate unmetered route. `/search` and its scenarios are untouched by it.
+
+It is off at both ends and both have to agree: `SEARCH_ENABLED=true` at frontend build time
+renders the box, `WEB_SEARCH_ENABLED=true` on the backend serves the route. The backend half
+is opt-in for the same reason the meter is opt-out, and a disabled instance answers 404 rather
+than 403 so it does not advertise itself. Three things keep it safe to leave open:
+
+- **It reads the global index and takes no `index` parameter at all.** Access control rides
+  x402, so an unmetered route that honoured one would read a private index for free. There is
+  no scoping to abuse because there is no scoping.
+- **It is rate limited per client**, 10 requests a minute by default, keyed on the address our
+  own edge observed rather than on the leftmost `X-Forwarded-For` entry, which the caller
+  supplies and could invent per request. Set `WEB_SEARCH_PROXY_HOPS` to the number of trusted
+  proxies in front of the process. The address is truncated to a /24 or /64 before it is used
+  as a key, which is what makes the privacy policy's claim about IP addresses true.
+- **The limiter is per replica**, so N replicas allow N times the limit. That is the right
+  trade for a free endpoint: a shared counter would put a broker in a stack that deliberately
+  has none, and precise metering is what `/search` is for.
+
+`WEB_SEARCH_ORIGINS` is the CORS allowlist, needed only for a cross-origin call: the site's
+own nginx proxies `/api` on the same origin, so the box itself never triggers a preflight.
+
+### Serving assumptions
+
+The site is `wuzzy.io` and the API is `api.wuzzy.io`. The frontend image is nginx over the
+pre-rendered `dist/`, and it proxies `/api/` to `BACKEND_ORIGIN` so the browser's requests
+stay same-origin. `/api/admin/` returns 404 there, in dev as well as in production.
+
+Fingerprinted `.js` and `.css` are served `immutable` for a year because the build
+content-addresses them. Brand assets and fonts keep their names across builds, so they get a
+week and never `immutable`: a corrected logo has to be able to reach a browser that already
+has one.
+
+```sh
+podman compose -f compose.full.yml up --build   # site on :8080, API on :3000
+```
 
 ## Admin app
 
@@ -159,6 +233,9 @@ cd apps/backend && bun run migration:run && cd -
 bun run dev:backend         # NestJS with watch on :3000
 bun run dev:frontend        # static build + dev server on :8080, proxies /api → :3000
 ```
+
+`apps/frontend/src/site.config.ts` is read at build time, so a change to `SEARCH_ENABLED`,
+`API_ORIGIN` or any other value there needs a rebuild rather than a restart.
 
 Compose files are engine-agnostic on purpose: dev machines run podman, cloud runs docker.
 

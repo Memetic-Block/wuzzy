@@ -17,6 +17,23 @@ RUN bun install --frozen-lockfile --linker=hoisted
 COPY tsconfig.json tsconfig.base.json ./
 COPY packages/static-site ./packages/static-site
 COPY apps/frontend ./apps/frontend
+
+# src/site.config.ts is read while the pages are rendered, so these are build
+# args rather than runtime environment: the values are baked into the HTML and
+# changing one means rebuilding the image. Docker exposes an ARG to RUN as an
+# environment variable, which is how the build below sees them.
+#
+# The two that do not exist yet render as a stated "published at cutover" note
+# instead of a dead link, so the page is complete without them.
+ARG SITE_ORIGIN
+ARG API_ORIGIN
+ARG X402_PRICE
+ARG X402_NETWORK
+ARG X402_PAY_TO
+ARG EAS_SCHEMA_URL
+ARG BAZAAR_URL
+# The free human search box. Needs WEB_SEARCH_ENABLED on the backend to match.
+ARG SEARCH_ENABLED
 RUN bun apps/frontend/build.ts
 
 FROM docker.io/library/nginx:1-alpine

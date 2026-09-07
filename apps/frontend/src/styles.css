@@ -3,3 +3,119 @@
 /* Class detection scans this app's sources; dist/ and node_modules are
    excluded automatically (gitignored). Add custom CSS below with @layer. */
 @source "../src";
+/* search.js emits result markup at runtime, so its classes are only visible
+   to Tailwind if this file is scanned too. */
+@source "../public/search.js";
+
+/* Berkeley Mono, carried over from the legacy wuzzy.io. Only the Regular and
+   Bold files exist, so each is claimed over a weight range: anything the page
+   asks for maps onto a real face instead of a synthesised one. */
+@font-face {
+  font-family: 'Berkeley Mono';
+  font-style: normal;
+  font-weight: 100 500;
+  font-display: swap;
+  src:
+    url('/fonts/BerkeleyMono-Regular.woff2') format('woff2'),
+    url('/fonts/BerkeleyMono-Regular.woff') format('woff');
+}
+@font-face {
+  font-family: 'Berkeley Mono';
+  font-style: normal;
+  font-weight: 600 900;
+  font-display: swap;
+  src:
+    url('/fonts/BerkeleyMono-Bold.woff2') format('woff2'),
+    url('/fonts/BerkeleyMono-Bold.woff') format('woff');
+}
+@font-face {
+  font-family: 'Berkeley Mono';
+  font-style: italic;
+  font-weight: 100 500;
+  font-display: swap;
+  src:
+    url('/fonts/BerkeleyMono-Italic.woff2') format('woff2'),
+    url('/fonts/BerkeleyMono-Italic.woff') format('woff');
+}
+@font-face {
+  font-family: 'Berkeley Mono';
+  font-style: italic;
+  font-weight: 600 900;
+  font-display: swap;
+  src:
+    url('/fonts/BerkeleyMono-BoldItalic.woff2') format('woff2'),
+    url('/fonts/BerkeleyMono-BoldItalic.woff') format('woff');
+}
+
+/* The legacy palette, which is two colours and two greys: black on white, with
+   a flat grey fill for anything set apart from the prose. No accent colour and
+   no gradient anywhere on the old site, so there is none here either. */
+@theme {
+  --font-mono: 'Berkeley Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --color-ink: #000;
+  --color-ink-muted: #666;
+  --color-paper: #fff;
+  --color-paper-alt: #eee;
+
+  --text-display: 2rem;
+}
+
+@layer base {
+  html {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums lining-nums;
+    background: var(--color-paper);
+    color: var(--color-ink);
+  }
+
+  /* Uppercase headings and 2px rules are the whole of the legacy site's
+     structure: it has no cards, shadows or rounded corners to port. */
+  h1,
+  h2 {
+    text-transform: uppercase;
+  }
+}
+
+@utility rule-double {
+  border-top: 6px double var(--color-ink);
+}
+
+/* Long-form pages: the privacy policy and the terms. Plain element styling
+   rather than a class on every tag, because these are documents carried over
+   from the legacy site and their markup should stay close to the source. */
+@layer components {
+  .legal {
+    line-height: 1.65;
+  }
+  .legal h2 {
+    margin: 2.5rem 0 0.75rem;
+    font-size: 1rem;
+    font-weight: 700;
+  }
+  .legal h3 {
+    margin: 1.5rem 0 0.5rem;
+    font-weight: 700;
+  }
+  .legal p {
+    margin: 0.75rem 0;
+  }
+  .legal ul,
+  .legal ol {
+    margin: 0.75rem 0;
+    padding-left: 2ch;
+  }
+  .legal ul {
+    list-style: '- ';
+  }
+  .legal ol {
+    list-style: decimal;
+  }
+  .legal li {
+    margin: 0.25rem 0;
+    padding-left: 0.5ch;
+  }
+  .legal a {
+    text-decoration: underline;
+  }
+}

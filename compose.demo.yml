@@ -72,6 +72,14 @@ services:
       # The admin view is opt-in and read-only. Left untokened here because the
       # demo binds to localhost; set ADMIN_TOKEN for anything reachable.
       ADMIN_ENABLED: "true"
+      # The free, rate-limited box on the public site. Opt-in, and separate from
+      # the meter: this is the route a browser can use, since it cannot sign a
+      # payment. The site is served from :8080 here rather than wuzzy.io.
+      WEB_SEARCH_ENABLED: "true"
+      WEB_SEARCH_ORIGINS: http://localhost:8080
+      # Nothing is in front of this container in the demo, so there is no
+      # X-Forwarded-For to trust and the socket address is the client.
+      WEB_SEARCH_PROXY_HOPS: "0"
     ports:
       - "3000:3000"
     depends_on:
@@ -109,6 +117,12 @@ services:
     build:
       context: .
       dockerfile: apps/frontend/Dockerfile
+      # Read while the pages are rendered, not at run time. The demo points at
+      # itself rather than at the public hostnames.
+      args:
+        SITE_ORIGIN: http://localhost:8080
+        API_ORIGIN: http://localhost:3001
+        SEARCH_ENABLED: "true"
     environment:
       BACKEND_ORIGIN: http://backend:3000
     ports:
