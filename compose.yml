@@ -16,6 +16,12 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    # The default 64MB /dev/shm is too small to build the hnsw index over a
+    # populated chunks table: a restore fails with "could not resize shared
+    # memory segment". Migrations create that index on an empty table, so the
+    # problem only appears when restoring a real corpus, which is exactly when
+    # it hurts most.
+    shm_size: 1gb
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U app -d app"]
       interval: 5s

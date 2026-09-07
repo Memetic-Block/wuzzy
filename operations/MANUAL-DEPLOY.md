@@ -71,6 +71,20 @@ wrangler reporting the deployment URL.
 If you redeploy the same sha, Nomad may treat the submission as unchanged and not schedule a
 new allocation. `nomad job stop -purge <job-name>` clears that.
 
+## Restoring the database
+
+`pg_restore` rebuilds the hnsw index, which needs more shared memory than a container gets by
+default. `wuzzy-db.hcl` sets `shm_size` for this; without it the restore appears to succeed and
+only the vector index is missing, which shows up later as slow search rather than as an error.
+
+Check for it explicitly after any restore:
+
+    select indexname from pg_indexes where tablename = 'chunks';
+
+`chunks_embedding_hnsw` must be in that list. If it is not, the restore logged
+`could not resize shared memory segment` and the index can be created by hand once the shared
+memory is large enough.
+
 ## Attesting
 
 This one spends money. Read [SCHEMA.md](../SCHEMA.md) first for what it costs.

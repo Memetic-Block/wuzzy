@@ -39,6 +39,12 @@ job "wuzzy-db" {
 
       config {
         image = "docker.io/pgvector/pgvector:pg16"
+        # 1GB, because the 64MB default is too small to build the hnsw index
+        # over a populated chunks table and a restore fails with "could not
+        # resize shared memory segment". Migrations build that index on an empty
+        # table, so this only bites during a restore, which is the worst moment
+        # to discover it. Found the hard way restoring the demo corpus.
+        shm_size = 1073741824
         args = [
           "-c", "listen_addresses=*",
           # The corpus is read-heavy and the vector arm scans; give it room.
