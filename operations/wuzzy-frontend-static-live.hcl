@@ -30,13 +30,13 @@ job "wuzzy-frontend-static-live" {
       driver = "docker"
 
       config {
-        image = "ghcr.io/memetic-block/wuzzy-frontend-deploy:sha-634ca1a428f849e7dcaa306b41f561291f3062a0"
+        image = "ghcr.io/memetic-block/wuzzy-frontend-deploy:sha-a8df3960b0714fb4e43bd3e51fc38a12e0331e73"
       }
 
       env {
         PROJECT_NAME  = "wuzzy-site-live"
         PAGES_BRANCH  = "live"
-        COMMIT_SHA    = "634ca1a428f849e7dcaa306b41f561291f3062a0"
+        COMMIT_SHA    = "a8df3960b0714fb4e43bd3e51fc38a12e0331e73"
 
         # Read by apps/frontend/src/site.config.ts while the pages render.
         SITE_ORIGIN     = "https://wuzzy.io"
