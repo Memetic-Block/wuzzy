@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { LogLevel, log as crawleeLog } from '@crawlee/basic';
 import { Test } from '@nestjs/testing';
 import { getDataSourceToken } from '@nestjs/typeorm';
+import { getQueueToken } from '@nestjs/bullmq';
 import type { INestApplication } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { exact } from 'x402/schemes';
@@ -21,10 +22,39 @@ import { SearchService } from '../search/search.service';
 import { connectForTests, globalIndexId, joinIndex, truncateWuzzyTables } from '../testing/database';
 import { scenario } from '../testing/scenario';
 import { crawlIndexQueue } from './index-crawl';
-import { INDEXES_CONFIG, buildIndexesConfig } from './index.config';
+import { CRAWL_QUEUE, crawlJobId } from '../queue/crawl.queue';
+import { INDEXES_CONFIG, buildIndexesConfig, requestBodyLimit } from './index.config';
 import { IndexesController } from './indexes.controller';
 import { IndexesService } from './indexes.service';
 import { PROTOCOL } from '../canonicalize/v1';
+
+describe('request size', () => {
+  it('sizes the accepted body from the URL limit, so the two cannot disagree', async () => {
+    // These are the same question asked twice: how many URLs one request may
+    // carry, and how many bytes that is. A limit of N URLs that rejects N URLs
+    // as too large is a bare 413 mentioning neither.
+    const url = 'https://docs.base.org/some/reasonably/typical/path/page-1234';
+    for (const limit of [2_000, 10_000, 50_000]) {
+      const allowed = Number(requestBodyLimit(limit).replace('mb', '')) * 1024 * 1024;
+      const realistic = JSON.stringify({ urls: Array.from({ length: limit }, () => url) }).length;
+      expect(allowed).toBeGreaterThan(realistic);
+    }
+
+    // Derived at boot rather than written down twice.
+    const bootstrap = await Bun.file(`${import.meta.dir}/../main.ts`).text();
+    expect(bootstrap).toContain('requestBodyLimit(buildIndexesConfig().requestUrlLimit)');
+  });
+
+  it('does not bound how large an index may become', () => {
+    // The two were one number, which meant a transport limit silently decided
+    // how much anyone could buy. An index grows by asking again.
+    expect(buildIndexesConfig({}).indexPageCap).toBeNull();
+    expect(buildIndexesConfig({}).requestUrlLimit).toBeGreaterThan(0);
+    // Still settable, for an index that should be bounded deliberately.
+    expect(buildIndexesConfig({ WUZZY_INDEX_PAGE_CAP: '500' }).indexPageCap).toBe(500);
+  });
+});
+
 
 crawleeLog.setLevel(LogLevel.WARNING);
 
@@ -34,7 +64,7 @@ const WALLET_A = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 const WALLET_B = '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
 const WALLET_C = '0xcccccccccccccccccccccccccccccccccccccccc';
 const WALLET_D = '0xdddddddddddddddddddddddddddddddddddddddd';
-const PAGE_CAP = 4;
+const REQUEST_URL_LIMIT = 4;
 
 /**
  * Fixture hashes are real digests of the URL rather than a repeated character:
@@ -72,6 +102,7 @@ beforeAll(async () => {
 });
 
 afterEach(async () => {
+  queued.length = 0;
   while (sites.length > 0) await sites.pop()?.close();
   await truncateWuzzyTables(dataSource);
   facilitator?.reset();
@@ -95,9 +126,22 @@ const site = async (pages: Record<string, string>): Promise<MockSite> => {
 };
 
 const indexesConfig = buildIndexesConfig({
-  WUZZY_INDEX_PAGE_CAP: String(PAGE_CAP),
+  WUZZY_INDEX_REQUEST_URL_LIMIT: String(REQUEST_URL_LIMIT),
   WUZZY_INDEX_PRICE_PER_PAGE: '$0.01',
 });
+
+/**
+ * Stands in for BullMQ. Recording what was asked for is the point: the API
+ * enqueueing a crawl is what makes a paid index start filling, so it is worth
+ * asserting rather than assuming.
+ */
+const queued: { name: string; data: { indexId: string }; opts?: { jobId?: string } }[] = [];
+const fakeQueue = {
+  add: async (name: string, data: { indexId: string }, opts?: { jobId?: string }) => {
+    queued.push({ name, data, opts });
+    return { id: opts?.jobId };
+  },
+};
 
 /** Boots /search and /indexes together, metered against the mock facilitator. */
 async function boot(source: DataSource, overrides: Partial<PaymentConfig> = {}) {
@@ -117,6 +161,7 @@ async function boot(source: DataSource, overrides: Partial<PaymentConfig> = {}) 
       { provide: getDataSourceToken(), useValue: source },
       { provide: PAYMENT_CONFIG, useValue: payment },
       { provide: INDEXES_CONFIG, useValue: indexesConfig },
+      { provide: getQueueToken(CRAWL_QUEUE), useValue: fakeQueue },
       PaymentService,
       { provide: IndexesService, useValue: new IndexesService(source, indexesConfig) },
       { provide: SearchService, useValue: new SearchService(source, stubEmbedder()) },
@@ -300,23 +345,30 @@ describe('configurable indexes', () => {
     }
   });
 
-  scenario('index creation respects the page cap', async () => {
+  scenario('index creation refuses more URLs than one request may carry', async () => {
     const source = ready();
     if (!source) return;
 
     const { app, url } = await boot(source);
     try {
-      const urls = Array.from({ length: PAGE_CAP + 1 }, (_, i) => `https://docs.test/page-${i}`);
+      const urls = Array.from({ length: REQUEST_URL_LIMIT + 1 }, (_, i) => `https://docs.test/page-${i}`);
       const response = await send(url, '/indexes', { name: 'Too big', urls }, WALLET_A);
 
       expect(response.status).toBe(400);
       const body = (await response.json()) as Record<string, any>;
-      expect(body.pageCap).toBe(PAGE_CAP);
-      expect(body.error).toContain(String(PAGE_CAP));
+      expect(body.requestUrlLimit).toBe(REQUEST_URL_LIMIT);
+      expect(body.error).toContain(String(REQUEST_URL_LIMIT));
+      // The remedy is another request, so the refusal has to say so: this is a
+      // limit on parsing, not on how much anyone may buy.
+      expect(body.error).toContain('Split it');
 
       // Rejected before the facilitator was ever asked to move money.
       expect(facilitator!.settled).toHaveLength(0);
       expect(await source.query(`SELECT id FROM indexes WHERE slug <> 'global'`)).toHaveLength(0);
+
+      // And nothing caps the index itself, so a large one is bought by asking
+      // again rather than refused.
+      expect(buildIndexesConfig({}).indexPageCap).toBeNull();
     } finally {
       await app.close();
     }
@@ -365,6 +417,42 @@ describe('configurable indexes', () => {
         expect(results.results[0]!.provenance.attestationUid).toBe(uid);
       }
       expect(shared.attestationUid).toBe(uid);
+    } finally {
+      await app.close();
+    }
+  });
+
+  scenario('a paid crawl is queued at once, not at the next batch run', async () => {
+    const source = ready();
+    if (!source) return;
+
+    const { app, url } = await boot(source);
+    try {
+      const created = await send(
+        url,
+        '/indexes',
+        { name: 'Prompt', urls: ['https://docs.test/a', 'https://docs.test/b'] },
+        WALLET_A,
+      );
+      expect(created.status).toBe(201);
+      const index = (await created.json()) as { id: string; slug: string };
+
+      // Enqueued during the request, not left for a sweep or a nightly job.
+      expect(queued).toHaveLength(1);
+      expect(queued[0]!.data.indexId).toBe(index.id);
+      // One job per index: an append mid-crawl must not start a second
+      // crawler over the same rows.
+      expect(queued[0]!.opts?.jobId).toBe(crawlJobId(index.id));
+      // BullMQ rejects a custom id containing ':', and it does so at enqueue
+      // time against a real Redis, where a stub queue will happily accept one.
+      expect(crawlJobId(index.id)).not.toContain(':');
+
+      const appended = await send(url, `/indexes/${index.slug}/urls`, {
+        urls: ['https://docs.test/c'],
+      }, WALLET_A);
+      expect(appended.status).toBe(200);
+      expect(queued).toHaveLength(2);
+      expect(queued[1]!.opts?.jobId).toBe(crawlJobId(index.id));
     } finally {
       await app.close();
     }

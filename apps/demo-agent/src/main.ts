@@ -7,16 +7,25 @@
  *   bun run demo search "how do I deploy a contract to Base"
  */
 import {
+  apiBase,
   appendToIndex,
+  commissionBody,
   commissionIndex,
   indexStatus,
   listIndexes,
   NotPermittedError,
   PageCapError,
+  quote,
   type CommissionOutcome,
   type IndexStatus,
 } from './indexes';
-import { basescanUrl, paidSearch, WalletRequiredError, type SearchOutcome } from './search';
+import {
+  basescanUrl,
+  DEFAULT_MAX_VALUE,
+  paidSearch,
+  WalletRequiredError,
+  type SearchOutcome,
+} from './search';
 import { createWallet, loadWallet, NoWalletError, walletPath } from './wallet';
 
 const USAGE = `wuzzy demo agent
@@ -36,6 +45,9 @@ const USAGE = `wuzzy demo agent
   --name=<text>               name for a commissioned index
   --private                   commission it unlisted, readable by an allowlist
   --reader=<0x...>            allow another wallet to read it (repeatable)
+  --max-spend=<usd>           ceiling for one command, default $0.10. An
+                              index costs per page, so commissioning a real
+                              one needs this raised deliberately.
 `;
 
 function renderIndex(index: IndexStatus): void {
@@ -196,6 +208,17 @@ async function main(argv: readonly string[]): Promise<number> {
  * wallet be the index's owner, which the API checks before it settles, so a
  * wallet that is turned away is not charged for finding out.
  */
+/** Dollars to USDC's six atomic decimals, or null if it is not an amount. */
+function atomicUsd(value: string): bigint | null {
+  const parsed = Number(value.replace(/^\$/, ''));
+  if (!Number.isFinite(parsed) || parsed < 0) return null;
+  return BigInt(Math.round(parsed * 1_000_000));
+}
+
+function usdOf(atomic: bigint): string {
+  return `$${(Number(atomic) / 1_000_000).toFixed(2)}`;
+}
+
 async function commission(
   command: 'commission' | 'append',
   positional: readonly string[],
@@ -239,27 +262,56 @@ async function commission(
   // would be decoration rather than a policy.
   const isPrivate = has('private') || readers.length > 0;
 
+  const spend = flag('max-spend');
+  const maxValue = spend === undefined ? DEFAULT_MAX_VALUE : atomicUsd(spend);
+  if (maxValue === null) {
+    console.error(`--max-spend must be an amount in dollars, got "${spend}"`);
+    return 1;
+  }
+
+  const options = {
+    api: endpoint,
+    urls,
+    name: flag('name'),
+    visibility: isPrivate ? ('unlisted' as const) : undefined,
+    readPolicy: isPrivate ? ('allowlist' as const) : undefined,
+    allowlist: readers,
+    privateKey: wallet?.privateKey,
+    network,
+    maxValue,
+    owner: wallet?.address,
+  };
+
+  // Ask before signing. This is the half of x402 worth having: the server
+  // answers an unpaid request with the price, and the client decides.
+  const target =
+    command === 'append'
+      ? `${apiBase(endpoint)}/indexes/${encodeURIComponent(reference!)}/urls`
+      : `${apiBase(endpoint)}/indexes`;
+  const priced = await quote(
+    target,
+    command === 'append' ? { urls } : commissionBody(options),
+  );
+
+  if (priced) {
+    console.log(`quoted    ${priced.usd} on ${priced.network}`);
+    if (priced.atomic > maxValue) {
+      // Refusing here rather than letting the payment library throw: the
+      // ceiling is the point, and a caller who hits it needs the number and
+      // the flag, not a stack trace from inside a dependency.
+      console.error(
+        `\nthat is above the ${usdOf(maxValue)} ceiling for this command.` +
+          `\nre-run with --max-spend=${(Number(priced.atomic) / 1_000_000).toFixed(2)} to approve it.`,
+      );
+      return 1;
+    }
+  }
+
   try {
     const outcome =
       command === 'append'
-        ? await appendToIndex({
-            api: endpoint,
-            index: reference!,
-            urls,
-            privateKey: wallet?.privateKey,
-            network,
-          })
-        : await commissionIndex({
-            api: endpoint,
-            urls,
-            name: flag('name'),
-            visibility: isPrivate ? 'unlisted' : undefined,
-            readPolicy: isPrivate ? 'allowlist' : undefined,
-            allowlist: readers,
-            privateKey: wallet?.privateKey,
-            network,
-            owner: wallet?.address,
-          });
+        ? await appendToIndex({ ...options, index: reference! })
+        : await commissionIndex(options);
 
     renderIndex(outcome.index);
     renderSettlement(outcome, network);

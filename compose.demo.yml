@@ -12,6 +12,18 @@
 # merges list fields by appending, so an overridden `ports` would try to bind
 # 5432 as well as 5433 and collide with whatever already holds it.
 services:
+  # The crawl queue's broker. A commissioned crawl is asked for by the API and
+  # done by a worker, so that a page someone paid for starts being fetched in
+  # seconds rather than whenever a nightly job next runs.
+  redis:
+    image: docker.io/library/redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   postgres:
     image: docker.io/pgvector/pgvector:pg16
     environment:
@@ -70,6 +82,7 @@ services:
       DB_MIGRATIONS_RUN: "true"
       PORT: "3000"
       POSTGRES_HOST: postgres
+      REDIS_HOST: redis
       POSTGRES_PORT: "5432"
       POSTGRES_USER: app
       POSTGRES_PASSWORD: app
@@ -106,6 +119,7 @@ services:
       NODE_ENV: production
       PORT: "3000"
       POSTGRES_HOST: postgres
+      REDIS_HOST: redis
       POSTGRES_PORT: "5432"
       POSTGRES_USER: app
       POSTGRES_PASSWORD: app
@@ -140,6 +154,29 @@ services:
       - "8080:80"
     depends_on:
       - backend
+
+  # A crawl worker. Same image as the backend, no HTTP: it takes jobs off the
+  # queue until stopped. `--scale worker=3` is how a slow crawl goes faster;
+  # each index is only ever crawled by one of them at a time.
+  worker:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+    command: ["bun", "apps/backend/src/worker.ts"]
+    environment:
+      POSTGRES_HOST: postgres
+      REDIS_HOST: redis
+      POSTGRES_DB: app
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      EMBEDDING_BASE_URL: http://embeddings:39500
+      EMBEDDING_MODEL: stub-embeddings
+      EMBEDDING_DIMENSIONS: "1536"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
   # A separate app on its own origin, so it can be kept off the public internet
   # rather than hidden behind a path on the public site. Bound to loopback here:

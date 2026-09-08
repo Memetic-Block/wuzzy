@@ -4,6 +4,18 @@
 # Engine-agnostic: works under `podman compose` and `docker compose` alike, so
 # keep it free of docker-only extensions.
 services:
+  # The crawl queue's broker. A commissioned crawl is asked for by the API and
+  # done by a worker, so that a page someone paid for starts being fetched in
+  # seconds rather than whenever a nightly job next runs.
+  redis:
+    image: docker.io/library/redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   postgres:
     # pgvector, not stock postgres — the schema migration creates the `vector`
     # extension and an hnsw index over chunk embeddings.

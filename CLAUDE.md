@@ -73,8 +73,22 @@ bun run migration:show
 A monorepo of bun workspaces. `apps/backend` is a NestJS API on the Bun runtime with
 TypeORM against Postgres + pgvector; `apps/frontend` pre-renders JSX pages to static HTML
 at build time and is served by nginx; `apps/demo-agent` is a paying client. Pipeline stages
-(crawl, embed, attest, verify) are CLI commands, not queue workers, so there is no broker in
-the stack.
+(crawl, embed, attest, verify) are CLI commands *and*, for crawling, queue jobs. That is not a
+contradiction: the command is the implementation and the queue is one caller of it. Every stage
+is still runnable by hand, and the global refresh runs that way on a nightly schedule.
+
+Commissioned crawls are the exception, because somebody paid for those and a batch window is not
+a defensible latency. The API enqueues one the moment a commission settles and
+[worker.ts](apps/backend/src/worker.ts) drains it, with Redis as the broker and throughput scaled
+by running more workers. Each index is crawled by one worker at a time: the crawler already
+parallelises and spaces its own requests per host, so a second crawler over the same rows would
+double the rate at a site without either half knowing.
+
+The queue is a trigger, never the record. What is owed is `index_urls` rows with a null
+`crawled_at`, written in the same transaction that took the money, and
+[queue/crawl.sweeper.ts](apps/backend/src/queue/crawl.sweeper.ts) re-enqueues anything still
+outstanding. An unreachable Redis therefore delays a crawl and cannot lose one, which is why the
+API logs an enqueue failure rather than failing a request that has already been paid for.
 
 **apps/demo-agent must not import from apps/backend.** It is the integration quickstart a
 third party reads, so it has to demonstrate what an outsider can build with the public API

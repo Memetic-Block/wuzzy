@@ -18,21 +18,28 @@ Feature: configurable indexes
     Then results come from the global index only
 
   Scenario: agent commissions an index
-    When a wallet pays the index-creation price for seeds it supplies within the page cap
+    When a wallet pays the index-creation price for seeds it supplies in one request
     Then an index is created with that wallet as owner
     And crawl jobs are enqueued only for URLs not already in the document store
     And the response includes the index id and a status endpoint
 
-  Scenario: index creation respects the page cap
-    When a wallet requests index creation whose seeds expand beyond the page cap
+  Scenario: index creation refuses more URLs than one request may carry
+    When a wallet requests index creation with more URLs than one request may carry
     Then creation is rejected before payment is settled
-    And the response states the cap
+    And the response states the limit and that the request may be split
+    And no limit is placed on how large the index may become
 
   Scenario: shared documents are crawled and attested once
     Given a URL already in the document store with an attestation
     When a new index includes that URL
     Then no re-crawl occurs
     And the existing attestation uid is served for it in both indexes
+
+  Scenario: a paid crawl is queued at once, not at the next batch run
+    When a wallet pays to commission an index
+    Then a crawl for that index is enqueued before the response is returned
+    And the same is true when the owner appends to it
+    And a queue that cannot be reached does not lose the work, only delays it
 
   Scenario: index status reaches ready
     Given a newly commissioned index
@@ -69,7 +76,7 @@ Feature: configurable indexes
 
   Scenario: owner appends to their index over time
     Given a ready index owned by wallet A
-    When wallet A pays to append URLs within the page cap
+    When wallet A pays to append URLs
     Then URLs not already in the document store are enqueued for crawling
     And already-stored URLs join the index immediately with their existing attestations
     And the appended pages become searchable in that index once crawled

@@ -19,6 +19,7 @@
   },
   "devDependencies": {
     "@types/bun": "^1.2.0",
-    "typescript": "^5.8.0"
+    "typescript": "^5.8.0",
+    "ethers": "^6.17.0"
   }
 }

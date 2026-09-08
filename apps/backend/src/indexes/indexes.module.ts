@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { QueueModule } from '../queue/queue.module';
 import { DatabaseModule } from '../database/database.module';
 import { PAYMENT_CONFIG, buildPaymentConfig } from '../payment/payment.config';
 import { PaymentService } from '../payment/payment.service';
@@ -7,7 +8,7 @@ import { IndexesController } from './indexes.controller';
 import { IndexesService } from './indexes.service';
 
 @Module({
-  imports: [DatabaseModule],
+  imports: [QueueModule, DatabaseModule],
   controllers: [IndexesController],
   providers: [
     IndexesService,

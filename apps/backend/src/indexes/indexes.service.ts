@@ -50,12 +50,26 @@ export interface UrlIntake {
   readonly enqueued: number;
 }
 
+/** One request carried more URLs than the API will parse at once. */
+export class RequestTooLargeError extends Error {
+  constructor(
+    readonly requested: number,
+    readonly limit: number,
+  ) {
+    super(
+      `this request carries ${requested} URLs; ${limit} is the most one request may carry. ` +
+        'Split it: an index is built by asking again, and there is no limit on how often.',
+    );
+  }
+}
+
+/** The index has a deliberate size limit and this would exceed it. */
 export class PageCapExceededError extends Error {
   constructor(
     readonly requested: number,
     readonly cap: number,
   ) {
-    super(`this request covers ${requested} pages; the cap is ${cap}`);
+    super(`this index holds ${requested} pages with this request; its cap is ${cap}`);
   }
 }
 
@@ -85,8 +99,8 @@ export class IndexesService {
     this.config = config ?? buildIndexesConfig();
   }
 
-  get pageCap(): number {
-    return this.config.pageCap;
+  get requestUrlLimit(): number {
+    return this.config.requestUrlLimit;
   }
 
   /** Price a client is quoted in the 402 for taking on `pages` pages. */
@@ -174,7 +188,7 @@ export class IndexesService {
 
   async create(request: CreateIndexRequest): Promise<IndexEntity> {
     const urls = normalizeUrls(request.urls);
-    this.assertWithinCap(urls.length);
+    this.assertRequestFits(urls.length);
 
     const owner = normalizeWallet(request.owner);
     return this.dataSource.transaction(async (manager) => {
@@ -184,7 +198,7 @@ export class IndexesService {
         owner,
         visibility: request.visibility ?? 'listed',
         readPolicy: request.readPolicy ?? 'open',
-        pageCap: this.config.pageCap,
+        pageCap: this.config.indexPageCap,
       });
 
       const readers = (request.allowlist ?? []).map(normalizeWallet).filter((w) => w !== owner);
@@ -213,8 +227,16 @@ export class IndexesService {
          (SELECT count(*) FROM index_urls WHERE index_id = $1 AND crawled_at IS NULL)::int AS pending`,
       [index.id],
     );
+    // Two separate questions: is this request too big to parse, and is the
+    // index allowed to get this large. The first is always asked; the second
+    // only when the index was given a cap.
+    this.assertRequestFits(urls.length);
+
     const held = Number(existing[0].pages) + Number(existing[0].pending);
-    this.assertWithinCap(held + urls.length, index.pageCap ?? this.config.pageCap);
+    const cap = index.pageCap ?? this.config.indexPageCap;
+    if (cap !== null && held + urls.length > cap) {
+      throw new PageCapExceededError(held + urls.length, cap);
+    }
 
     return this.dataSource.transaction((manager) => intake(manager, index.id, urls));
   }
@@ -246,8 +268,10 @@ export class IndexesService {
     return wallet !== null && normalizeWallet(wallet) === index.owner;
   }
 
-  private assertWithinCap(pages: number, cap = this.config.pageCap): void {
-    if (pages > cap) throw new PageCapExceededError(pages, cap);
+  private assertRequestFits(urls: number): void {
+    if (urls > this.config.requestUrlLimit) {
+      throw new RequestTooLargeError(urls, this.config.requestUrlLimit);
+    }
   }
 
   private repository() {

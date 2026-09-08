@@ -8,14 +8,19 @@ import {
   Post,
   Req,
   Res,
+  Logger,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
+import { CRAWL_QUEUE, crawlJobId, type CrawlJob } from '../queue/crawl.queue';
 import { PaymentService, payerOf, type PaymentAcceptance } from '../payment/payment.service';
 import {
   IndexesService,
   InvalidUrlError,
   InvalidWalletError,
   PageCapExceededError,
+  RequestTooLargeError,
   UnknownIndexError,
 } from './indexes.service';
 import type { IndexReadPolicy, IndexVisibility } from '../database/index.entity';
@@ -44,10 +49,32 @@ interface AppendBody {
  */
 @Controller('indexes')
 export class IndexesController {
+  private readonly logger = new Logger(IndexesController.name);
+
   constructor(
     private readonly indexes: IndexesService,
     private readonly payment: PaymentService,
+    @InjectQueue(CRAWL_QUEUE) private readonly crawls: Queue<CrawlJob>,
   ) {}
+
+  /**
+   * Asks for the crawl someone just paid for.
+   *
+   * Never throws. What is owed is the `index_urls` rows written in the same
+   * transaction as the payment, and the sweeper enqueues anything still
+   * outstanding. So a queue that is unreachable here delays a crawl by up to
+   * one sweep; it cannot take money for work that never gets requested.
+   */
+  private async requestCrawl(indexId: string): Promise<void> {
+    try {
+      await this.crawls.add(CRAWL_QUEUE, { indexId }, { jobId: crawlJobId(indexId) });
+    } catch (error) {
+      this.logger.error(
+        `could not enqueue a crawl for ${indexId}, leaving it to the sweeper: ` +
+          `${error instanceof Error ? error.message : error}`,
+      );
+    }
+  }
 
   /** The public catalog. Unlisted indexes are absent from it entirely. */
   @Get()
@@ -79,10 +106,14 @@ export class IndexesController {
     }
     // Quoted before the meter sees the request, and only from the body, so the
     // 402's amount and the retry's signed amount cannot disagree.
-    if (urls.length > this.indexes.pageCap) {
+    if (urls.length > this.indexes.requestUrlLimit) {
+      // Too big to parse, not too big to buy. The remedy is another request,
+      // so the response says so rather than quoting a limit on the index.
       response.status(HttpStatus.BAD_REQUEST).json({
-        error: `this request covers ${urls.length} pages; the cap is ${this.indexes.pageCap}`,
-        pageCap: this.indexes.pageCap,
+        error:
+          `this request carries ${urls.length} URLs; ` +
+          `${this.indexes.requestUrlLimit} is the most one request may carry. Split it.`,
+        requestUrlLimit: this.indexes.requestUrlLimit,
         requested: urls.length,
       });
       return;
@@ -119,6 +150,9 @@ export class IndexesController {
         const settled = await this.payment.settle(outcome.accepted);
         if (settled) response.setHeader('X-PAYMENT-RESPONSE', settled);
       }
+
+      // Paid for, so start it now rather than at the next sweep.
+      await this.requestCrawl(created.id);
       response.status(HttpStatus.CREATED).json(await this.indexes.status(created));
     } catch (error) {
       respondToDomainError(error, response);
@@ -166,6 +200,8 @@ export class IndexesController {
         const settled = await this.payment.settle(outcome.accepted);
         if (settled) response.setHeader('X-PAYMENT-RESPONSE', settled);
       }
+
+      await this.requestCrawl(index.id);
       response.status(HttpStatus.OK).json({ ...(await this.indexes.status(index)), ...intake });
     } catch (error) {
       respondToDomainError(error, response);
@@ -227,6 +263,14 @@ function enumValue<T extends string>(value: unknown, allowed: readonly T[]): T |
 }
 
 function respondToDomainError(error: unknown, response: Response): void {
+  if (error instanceof RequestTooLargeError) {
+    response.status(HttpStatus.BAD_REQUEST).json({
+      error: error.message,
+      requestUrlLimit: error.limit,
+      requested: error.requested,
+    });
+    return;
+  }
   if (error instanceof PageCapExceededError) {
     response.status(HttpStatus.BAD_REQUEST).json({
       error: error.message,
