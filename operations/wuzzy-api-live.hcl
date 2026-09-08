@@ -84,6 +84,14 @@ job "wuzzy-api-live" {
 
         EAS_CHAIN   = "base"
         SEARCH_MODE = "hybrid"
+
+        # Owner of the global index. The migration seeds that row ownerless
+        # because it cannot know the wallet, and the service adopts this on
+        # boot, so an unset value leaves the global index owned by the zero
+        # address and the operator unable to append to their own index. An
+        # address rather than a key, so it belongs in the spec: nothing signs
+        # with it, and it is already public in the /indexes catalog.
+        WUZZY_OPERATOR_WALLET = "0x0Deb462437ab46F703fcd15F9cf9c9Ea6472EAcB"
       }
 
       template {
