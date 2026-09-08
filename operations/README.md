@@ -6,6 +6,7 @@ machine that can reach the `mb-hel` cluster; see [MANUAL-DEPLOY.md](MANUAL-DEPLO
 | Job | Type | Where it runs | What it is |
 | --- | --- | --- | --- |
 | [wuzzy-db.hcl](wuzzy-db.hcl) | service | `meta.env=store` | Postgres + pgvector. The only stateful thing. |
+| [wuzzy-migrate.hcl](wuzzy-migrate.hcl) | batch | `meta.env=store` | Applies pending migrations and exits. Run before the API. |
 | [wuzzy-api-live.hcl](wuzzy-api-live.hcl) | service | `meta.env=store` | The public API at `api.wuzzy.io`. |
 | [wuzzy-api-stage.hcl](wuzzy-api-stage.hcl) | service | `meta.env=store` | The same, at `api-stage.wuzzy.io`. |
 | [wuzzy-frontend-static-live.hcl](wuzzy-frontend-static-live.hcl) | batch | `meta.env=edge-worker` | Builds the site and pushes it to Cloudflare Pages. |
