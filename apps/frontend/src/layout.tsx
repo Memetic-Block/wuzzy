@@ -4,9 +4,13 @@ import { site } from './site.config';
 /**
  * The shell every public page renders into.
  *
- * The brand is carried over from the legacy wuzzy.io: Berkeley Mono, black on
- * white, uppercase headings, 2px rules, and no accent colour. Nothing else
- * came across, so there is no framework here and no client-side router.
+ * One 53rem column, a 1.5px rule above and below it, and nothing between the
+ * header and the content. The rules are 1.5px rather than 1 or 2 on purpose:
+ * they are the heaviest line on the page and they have to out-weigh the 1px
+ * hairlines that divide the sections without reading as a box.
+ *
+ * There is no framework here and no client-side router. The one script on the
+ * site is the search box's, and it is loaded by the page that has one.
  */
 export const Layout = ({ title, children }: { title: string; children?: Children }) => (
   <html lang="en">
@@ -30,52 +34,71 @@ export const Layout = ({ title, children }: { title: string; children?: Children
 
       <link rel="stylesheet" href="/styles.css" />
     </head>
-    <body class="bg-paper text-ink flex min-h-screen flex-col px-6">
-      {/* One bar on every page: mark and name left, where a reader looks first
-          for whose site this is, and the way out to the docs on the right. */}
-      <header class="border-ink mx-auto flex w-full max-w-5xl items-center justify-between gap-4 border-b-2 py-4">
-        <a href="/" class="inline-flex items-center gap-3 no-underline">
-          <img src="/brand/wuzzy-logo.png" alt="" width="32" height="32" class="size-8" />
-          <span class="text-lg font-bold uppercase">{site.name}</span>
-        </a>
-        <nav class="flex items-center gap-5 text-sm">
-          <a href={site.docsOrigin} class="underline">
-            Docs
-          </a>
-        </nav>
-      </header>
-
-      <main class="mx-auto w-full max-w-5xl flex-1 pt-10 pb-16">{children}</main>
-
-      <Footer />
+    <body class="bg-paper text-ink px-5">
+      <div class="max-w-page mx-auto flex min-h-screen flex-col">
+        <Header />
+        <main class="flex-1">{children}</main>
+        <Footer />
+      </div>
     </body>
   </html>
 );
 
-const FOOTER_LINKS = [
+/**
+ * Mark, wordmark and its descriptor on the left; the four things a reviewer
+ * goes looking for on the right. Baseline-aligned rather than centred, so the
+ * nav sits on the same line as the wordmark and not on the descriptor.
+ */
+const Header = () => (
+  <header class="border-ink flex flex-wrap items-end justify-between gap-4 border-b-[1.5px] pt-[22px] pb-[14px]">
+    <a href="/" class="flex items-center gap-3 text-inherit no-underline">
+      <img src="/brand/wuzzy-logo.png" alt="Wuzzy" width="30" height="30" class="block size-[30px]" />
+      <span class="flex flex-col gap-px">
+        <span class="text-wordmark tracking-h3 font-semibold" style="line-height:1.1">
+          {site.name}
+        </span>
+        <span class="text-sub text-ink-muted tracking-wordmark">{site.wordmarkSubtitle}</span>
+      </span>
+    </a>
+    <nav class="text-note flex gap-[18px] pb-0.5">
+      {HEADER_LINKS.map((link) => (
+        <a href={link.href}>{link.label}</a>
+      ))}
+    </nav>
+  </header>
+);
+
+/**
+ * Where to learn it, where the source is, and how to check it. The legal pages
+ * are not here: they belong to the footer, which is where a reader looks for
+ * them, and putting them in the bar spends the most valuable row on the page
+ * on the two links nobody arrives wanting.
+ */
+const HEADER_LINKS = [
+  { href: '/about', label: 'About' },
+  { href: '/roadmap', label: 'Roadmap' },
+  { href: site.docsOrigin, label: 'Docs' },
   { href: site.repo, label: 'GitHub' },
-  { href: `${site.repo}/blob/master/VERIFY.md`, label: 'Verify' },
+  { href: `${site.repo}/blob/master/VERIFY.md`, label: 'VERIFY.md' },
+];
+
+const FOOTER_LINKS = [
   { href: '/privacy', label: 'Privacy' },
   { href: '/terms', label: 'Terms' },
   { href: `mailto:${site.contactEmail}`, label: 'Contact' },
-  { href: site.social.href, label: site.social.label },
 ];
 
 const Footer = () => (
-  <footer class="border-ink mt-auto border-t-2 py-8 text-center text-sm">
-    <img src="/brand/wuzzy-mark.png" alt="" width="32" height="32" class="mx-auto size-8" />
-    <p class="mt-4 flex flex-wrap justify-center gap-x-4 gap-y-1">
-      {FOOTER_LINKS.map((link) => (
-        <a href={link.href} class="underline">
-          {link.label}
-        </a>
-      ))}
-    </p>
-    <p class="text-ink-muted mt-3">
-      Built and operated by{' '}
-      <a href={site.operator.href} class="underline">
+  <footer class="border-ink text-note text-ink-muted mt-auto flex flex-wrap items-center gap-[18px] border-t-[1.5px] pt-4 pb-10">
+    <img src="/brand/wuzzy-mark.png" alt="" width="20" height="20" class="block size-5 opacity-75" />
+    <span>
+      Built by{' '}
+      <a href={site.operator.href} rel="noopener noreferrer">
         {site.operator.name}
       </a>
-    </p>
+    </span>
+    {FOOTER_LINKS.map((link) => (
+      <a href={link.href}>{link.label}</a>
+    ))}
   </footer>
 );

@@ -47,18 +47,87 @@
     url('/fonts/BerkeleyMono-BoldItalic.woff') format('woff');
 }
 
-/* The legacy palette, which is two colours and two greys: black on white, with
-   a flat grey fill for anything set apart from the prose. No accent colour and
-   no gradient anywhere on the old site, so there is none here either. */
+/* The palette, type scale and rules are lifted from the approved design export
+   at docs/design/Wuzzy_Homepage.dc.html, which specifies every value as an
+   inline literal. They are tokens here so the page can be read as structure
+   rather than as a wall of hex, and so a palette change is one edit.
+
+   It is a warm paper ground with a single green accent, which replaces the
+   legacy site's pure black-on-white. The greys are not neutral: they are all
+   warm-shifted to sit on the paper without looking blue against it. */
 @theme {
   --font-mono: 'Berkeley Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
-  --color-ink: #000;
-  --color-ink-muted: #666;
-  --color-paper: #fff;
-  --color-paper-alt: #eee;
+  /* Grounds, lightest surface last: the case and its tickets sit *above* the
+     page, so they are lighter than it rather than darker. */
+  --color-paper: #f1efe7;
+  --color-paper-raised: #fcfbf6;
+  --color-paper-sunk: #f6f4ed;
+  --color-field: #ffffff;
 
-  --text-display: 2rem;
+  /* Ink, darkest first. `ink` is text and every structural border; `body` is
+     running prose, deliberately lighter so headings read as headings without
+     needing extra weight; `muted` is metadata that must not compete. */
+  --color-ink: #171a14;
+  --color-ink-body: #3c4137;
+  --color-ink-muted: #6a6e60;
+  --color-ink-faint: #9a9c90;
+
+  /* Rules, lightest last. Three weights of hairline: section dividers, the
+     dashed ticket edge, and the near-invisible line between ledger rows. */
+  --color-rule: #d6d3c6;
+  --color-rule-strong: #c9c6b8;
+  --color-rule-dashed: #a8ab9c;
+  --color-rule-soft: #e6e3d8;
+  --color-underline: #b9bcaf;
+
+  /* The one accent. Links, step numerals, prices and the commission CTA. */
+  --color-accent: #0c6e3f;
+  --color-accent-select: #c9e4d4;
+  --color-accent-bright: #8fc7a6;
+
+  /* The transcript block is the only dark surface on the page. */
+  --color-terminal: #12140f;
+  --color-terminal-rule: #2c2f26;
+  --color-terminal-text: #dce3d6;
+  --color-terminal-label: #8b8f80;
+  --color-terminal-status: #e0a458;
+
+  /* Pending/preview state: the shipping badge, and nothing else. */
+  --color-pending: #9a5b07;
+
+  /* Type scale in the export's own px values. Berkeley Mono was tuned at these
+     exact sizes; rounding them to a rem scale shifts the receipt line and the
+     ledger chrome enough to change the density the design depends on. Names
+     are the role each size plays, so a change is traceable to the design. */
+  --text-marker: 10.5px;
+  --text-receipt: 11px;
+  --text-sub: 11.5px;
+  --text-step: 12px;
+  --text-note: 12.5px;
+  --text-prose: 13px;
+  --text-prose-lg: 13.5px;
+  --text-item: 14px;
+  --text-result: 14.5px;
+  --text-lead: 15px;
+  --text-wordmark: 19px;
+  --text-h3: 22px;
+  --text-h2: 27px;
+  --text-h1: 34px;
+
+  /* Tracking. Tight on headings, open on the uppercase chrome, where Berkeley
+     Mono's already-wide figures would otherwise read as a solid block. */
+  --tracking-h1: -0.035em;
+  --tracking-h2: -0.03em;
+  --tracking-h3: -0.02em;
+  --tracking-wordmark: 0.04em;
+  --tracking-button: 0.06em;
+  --tracking-caption: 0.12em;
+  --tracking-terminal: 0.14em;
+  --tracking-marker: 0.16em;
+
+  /* The measure. The page is one 53rem column throughout. */
+  --container-page: 53rem;
 }
 
 @layer base {
@@ -69,11 +138,55 @@
     color: var(--color-ink);
   }
 
-  /* Uppercase headings and 2px rules are the whole of the legacy site's
-     structure: it has no cards, shadows or rounded corners to port. */
-  h1,
-  h2 {
-    text-transform: uppercase;
+  /* The body size, and NOT the root size, exactly as the design sets it.
+     `rem` resolves against the root, so putting 15px on `html` would quietly
+     rescale every rem in the build: the measure, the case height and all of
+     Tailwind's spacing, which is `.25rem` a unit. That is a 6% shrink of the
+     whole layout dressed up as a font-size. */
+  body {
+    font-size: var(--text-lead);
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* One accent, used only for things that go somewhere. Hover darkens to ink
+     rather than lightening, so a link never loses contrast against the paper. */
+  a {
+    color: var(--color-accent);
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 2px;
+  }
+  a:hover {
+    color: var(--color-ink);
+  }
+
+  ::placeholder {
+    color: var(--color-ink-faint);
+  }
+  ::selection {
+    background: var(--color-accent-select);
+  }
+}
+
+/* The ledger is the one scrolling region on the page, so its scrollbar is part
+   of the design rather than the platform's. The thumb is inset by a border in
+   the case's own background colour, which is how it reads as a hairline track
+   instead of a widget. Firefox gets the standard properties; the WebKit
+   pseudo-elements cover the rest. */
+@utility ledger-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-rule) var(--color-paper);
+
+  &::-webkit-scrollbar {
+    width: 10px;
+  }
+  &::-webkit-scrollbar-track {
+    background: var(--color-paper);
+  }
+  &::-webkit-scrollbar-thumb {
+    background: var(--color-rule);
+    border: 3px solid var(--color-paper-raised);
   }
 }
 

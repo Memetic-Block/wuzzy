@@ -1,0 +1,44 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/search",
+    "body": {
+      "query": "staking rewards formula",
+      "topK": 5
+    }
+  },
+  "status": 402,
+  "statusText": "Payment Required",
+  "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "x-powered-by": "Express"
+  },
+  "body": {
+    "x402Version": 1,
+    "error": "X-PAYMENT header is required",
+    "accepts": [
+      {
+        "scheme": "exact",
+        "network": "base-sepolia",
+        "maxAmountRequired": "10000",
+        "resource": "http://localhost:3001/search",
+        "description": "One Wuzzy search query with onchain provenance",
+        "mimeType": "application/json",
+        "payTo": "0x2222222222222222222222222222222222222222",
+        "maxTimeoutSeconds": 60,
+        "asset": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+        "outputSchema": {
+          "input": {
+            "type": "http",
+            "method": "POST",
+            "discoverable": true
+          }
+        },
+        "extra": {
+          "name": "USDC",
+          "version": "2"
+        }
+      }
+    ]
+  }
+}

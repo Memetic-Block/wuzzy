@@ -60,4 +60,8 @@ export function h(
   return `<${tag}${attrs}>${renderChildren(children)}</${tag}>`;
 }
 
-export const Fragment: Component = ({ children }) => renderChildren(children);
+// Typed on its own rather than as a `Component`, whose props carry an index
+// signature that a fragment's `{ children }` cannot satisfy. A fragment takes
+// children and nothing else, which is exactly what this says.
+export const Fragment = ({ children }: { children?: Children }): string =>
+  renderChildren(children);

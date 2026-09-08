@@ -15,13 +15,13 @@ import { site } from '../site.config';
  */
 export default () => (
   <Layout title="Privacy Policy | Wuzzy">
-    <article class="legal">
+    <article class="legal pb-16">
       <h1 class="mt-6 mb-6 text-2xl font-bold">Privacy Policy</h1>
 
       <p class="text-ink-muted">
-        <strong>Effective Date:</strong> November 15, 2025
+        <strong>Effective Date:</strong> {site.legalEffective}
         <br />
-        <strong>Last Updated:</strong> November 15, 2025
+        <strong>Last Updated:</strong> {site.legalUpdated}
       </p>
 
       <h2>1. Introduction</h2>

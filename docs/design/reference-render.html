@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+</head>
+<body>
+
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  html { background: #F1EFE7; }
+  body { margin: 0; background: #F1EFE7; color: #171A14;
+    font-family: "Berkeley Mono", "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 15px; line-height: 1.65; -webkit-font-smoothing: antialiased; }
+  * { box-sizing: border-box; }
+  a { color: #0C6E3F; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  a:hover { color: #171A14; }
+  input, button { font: inherit; }
+  ::placeholder { color: #9A9C90; }
+  ::selection { background: #C9E4D4; }
+  .wz-scroll::-webkit-scrollbar { width: 10px; }
+  .wz-scroll::-webkit-scrollbar-track { background: #F1EFE7; }
+  .wz-scroll::-webkit-scrollbar-thumb { background: #D6D3C6; border: 3px solid #FCFBF6; }
+</style>
+
+
+<div style="min-height:100%;background:#F1EFE7;padding:0 20px 0">
+  <div style="max-width:53rem;margin:0 auto">
+
+    <header style="display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;padding:22px 0 14px;border-bottom:1.5px solid #171A14">
+      <div style="display:flex;align-items:center;gap:12px">
+        <img src="../../apps/frontend/public/brand/wuzzy-logo.png" alt="Wuzzy" width="30" height="30" style="display:block;width:30px;height:30px" />
+        <div style="display:flex;flex-direction:column;gap:1px">
+          <div style="font-size:19px;font-weight:600;letter-spacing:-0.02em;line-height:1.1">Wuzzy</div>
+          <div style="font-size:11.5px;color:#6A6E60;letter-spacing:0.04em">provable, decentralized search</div>
+        </div>
+      </div>
+      <nav style="display:flex;gap:18px;font-size:12.5px;padding-bottom:2px">
+        <a href="#">GitHub</a>
+        <a href="#">VERIFY.md</a>
+        <a href="#">Privacy</a>
+        <a href="#">Terms</a>
+      </nav>
+    </header>
+
+    <section data-screen-label="Act 1 — Specimen" style="padding:44px 0 52px;border-bottom:1px solid #D6D3C6">
+      
+        <div style="font-size:11px;letter-spacing:0.16em;color:#6A6E60;margin-bottom:22px">01 — THE SPECIMEN</div>
+      
+      <h1 style="margin:0 0 14px;font-size:34px;font-weight:600;letter-spacing:-0.035em;line-height:1.12;max-width:22ch">Provable, decentralized search.</h1>
+      <p style="margin:0;max-width:58ch;color:#3C4137;font-size:15px;line-height:1.6">Every result carries an onchain receipt — what was crawled, when, and proof nobody has rearranged it since.</p>
+
+      <div style="margin-top:30px;border:1.5px solid #171A14;background:#FCFBF6;display:flex;flex-direction:column;height:34rem;max-height:80vh;overflow:hidden">
+        <div style="display:flex;justify-content:space-between;gap:12px;background:#171A14;color:#F1EFE7;padding:7px 14px;font-size:10.5px;letter-spacing:0.16em">
+          <span>SPECIMEN CASE · INDEX #1</span>
+          <span style="color:#8FC7A6">LIVE</span>
+        </div>
+
+        <form style="display:flex;gap:8px;padding:14px;border-bottom:1px solid #D6D3C6">
+          <input type="search" aria-label="Search index #1" placeholder="Try: how do I accept x402 payments?" value="" style="flex:1;min-width:0;padding:10px 12px;border:1.5px solid #171A14;background:#FFFFFF;color:#171A14;border-radius:0;font-size:14px" />
+          <button type="submit" style="padding:10px 18px;border:1.5px solid #171A14;background:#171A14;color:#F1EFE7;border-radius:0;cursor:pointer;font-size:13px;letter-spacing:0.06em;font-weight:500">SEARCH</button>
+        </form>
+
+        <div style="padding:11px 14px;border-bottom:1px solid #D6D3C6;font-size:12.5px;color:#3C4137;line-height:1.55;max-width:74ch">You're searching <strong style="font-weight:600;color:#171A14">index #1</strong> — the Base ecosystem's documentation, commissioned and operated by us. Free for humans, rate-limited. Agents pay per query.</div>
+
+        <div style="padding:6px 14px;border-bottom:1px solid #D6D3C6;font-size:10.5px;letter-spacing:0.12em;color:#6A6E60;background:#F6F4ED">SAMPLE RESULTS — CAPTURED FROM THE LIVE API</div>
+
+        <div class="wz-scroll" style="flex:1;min-height:0;overflow-y:auto">
+          
+            <article style="padding:14px;border-bottom:1px solid #E6E3D8">
+              <a href="#" style="font-size:14.5px;font-weight:500;color:#171A14;text-decoration-color:#B9BCAF">Accepting x402 payments in an Express app</a>
+              <p style="margin:5px 0 8px;font-size:13px;color:#3C4137;line-height:1.55;max-width:78ch">Add the payment middleware to any route. Unpaid requests receive HTTP 402 with the price and pay-to address; paid requests settle in USDC on Base…</p>
+              <div style="display:flex;flex-wrap:wrap;gap:4px 14px;font-size:11px;color:#6A6E60">
+                <span style="color:#0C6E3F;font-weight:500">attested ✓</span>
+                <span>sha256 0x8f3a…c41d</span>
+                <span>fetched 2026-09-05 14:02 UTC</span>
+                <a href="#" style="font-size:11px">view attestation</a>
+              </div>
+            </article>
+          
+            <article style="padding:14px;border-bottom:1px solid #E6E3D8">
+              <a href="#" style="font-size:14.5px;font-weight:500;color:#171A14;text-decoration-color:#B9BCAF">EIP-3009: transfer with authorization</a>
+              <p style="margin:5px 0 8px;font-size:13px;color:#3C4137;line-height:1.55;max-width:78ch">Enables gasless USDC transfers by letting the recipient or a third party submit a signed authorization on the payer's behalf…</p>
+              <div style="display:flex;flex-wrap:wrap;gap:4px 14px;font-size:11px;color:#6A6E60">
+                <span style="color:#0C6E3F;font-weight:500">attested ✓</span>
+                <span>sha256 0x2b91…77e0</span>
+                <span>fetched 2026-09-05 13:47 UTC</span>
+                <a href="#" style="font-size:11px">view attestation</a>
+              </div>
+            </article>
+          
+
+          
+
+          
+        </div>
+      </div>
+
+      <div style="margin-top:18px">
+        <a href="#commission" style="display:inline-block;padding:10px 16px;border:1.5px solid #0C6E3F;color:#0C6E3F;text-decoration:none;font-size:13px;letter-spacing:0.04em;font-weight:500">Commission your own index →</a>
+      </div>
+    </section>
+
+    <section id="commission" data-screen-label="Act 2 — Commission" style="padding:52px 0 56px;border-bottom:1px solid #D6D3C6">
+      
+        <div style="font-size:11px;letter-spacing:0.16em;color:#6A6E60;margin-bottom:22px">02 — THE PRODUCT</div>
+      
+      <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+        <h2 style="margin:0;font-size:27px;font-weight:600;letter-spacing:-0.03em;line-height:1.15">Commission your own index.</h2>
+        
+          <span style="font-size:10.5px;letter-spacing:0.12em;border:1px solid #9A5B07;color:#9A5B07;padding:3px 7px;white-space:nowrap">SHIPPING THIS WEEK</span>
+        
+      </div>
+      <p style="margin:0;max-width:60ch;color:#3C4137;line-height:1.6">Point Wuzzy at any sources. We crawl them honestly — robots respected, posted prices paid or skipped, never evaded — and attest every page on Base. Queryable in about an hour. No account, no API key: a wallet is enough.</p>
+
+      <ol style="list-style:none;margin:28px 0 0;padding:0;display:grid;gap:0;border-top:1px solid #D6D3C6">
+        <li style="display:flex;gap:14px;padding:12px 0;border-bottom:1px solid #D6D3C6">
+          <span style="color:#0C6E3F;font-size:12px;font-weight:600;min-width:2ch;padding-top:2px">01</span>
+          <span style="max-width:62ch;font-size:14px;line-height:1.6">Send your seed URLs. The response is an HTTP 402 with the price for the pages they expand to.</span>
+        </li>
+        <li style="display:flex;gap:14px;padding:12px 0;border-bottom:1px solid #D6D3C6">
+          <span style="color:#0C6E3F;font-size:12px;font-weight:600;min-width:2ch;padding-top:2px">02</span>
+          <span style="max-width:62ch;font-size:14px;line-height:1.6">Pay it in USDC on Base — one x402 payment from any wallet.</span>
+        </li>
+        <li style="display:flex;gap:14px;padding:12px 0;border-bottom:1px solid #D6D3C6">
+          <span style="color:#0C6E3F;font-size:12px;font-weight:600;min-width:2ch;padding-top:2px">03</span>
+          <span style="max-width:62ch;font-size:14px;line-height:1.6">The crawl runs. A status endpoint reports pages fetched and attested.</span>
+        </li>
+        <li style="display:flex;gap:14px;padding:12px 0;border-bottom:1px solid #D6D3C6">
+          <span style="color:#0C6E3F;font-size:12px;font-weight:600;min-width:2ch;padding-top:2px">04</span>
+          <span style="max-width:62ch;font-size:14px;line-height:1.6">Query your index per-request, from the same wallet or anyone you allow.</span>
+        </li>
+      </ol>
+
+      <div style="margin-top:28px;border:1.5px solid #171A14;background:#12140F;overflow:hidden">
+        <div style="display:flex;justify-content:space-between;gap:12px;padding:6px 14px;border-bottom:1px solid #2C2F26;font-size:10.5px;letter-spacing:0.14em;color:#8B8F80">
+          <span>SESSION TRANSCRIPT</span>
+          <span>api.wuzzy.io</span>
+        </div>
+        <pre style="margin:0;padding:16px 14px;overflow-x:auto;font-size:12.5px;line-height:1.75;color:#DCE3D6;font-family:inherit">$ curl -i https://api.wuzzy.io/indexes -d '{"seeds":["https://docs.yourprotocol.xyz"]}'
+<span style="color:#E0A458">HTTP/1.1 402 Payment Required</span>
+{ "price": "$7.84", "pages": 392, "payTo": "0x…", "network": "base" }
+
+$ # pay with any x402 client, then:
+$ curl "https://api.wuzzy.io/search?index=ix_7f2a" -d '{"q":"staking rewards formula"}'</pre>
+      </div>
+
+      <div style="display:grid;gap:8px;margin-top:24px">
+        <div style="border:1px dashed #A8AB9C;background:#FCFBF6;padding:12px 14px;display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;font-size:13.5px">
+          <span>Your protocol's docs, ~400 pages</span>
+          <span style="color:#0C6E3F;font-weight:500;white-space:nowrap">≈ $8, ready this afternoon</span>
+        </div>
+        <div style="border:1px dashed #A8AB9C;background:#FCFBF6;padding:12px 14px;display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;font-size:13.5px">
+          <span>Every EIP your agent cites, ~900 pages</span>
+          <span style="color:#0C6E3F;font-weight:500;white-space:nowrap">≈ $18</span>
+        </div>
+        <div style="border:1px dashed #A8AB9C;background:#FCFBF6;padding:12px 14px;display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;font-size:13.5px">
+          <span>Docs for your whole dependency stack, ~1,500 pages</span>
+          <span style="color:#0C6E3F;font-weight:500;white-space:nowrap">≈ $30</span>
+        </div>
+      </div>
+
+      <p style="margin:24px 0 0;max-width:60ch;color:#3C4137;font-size:14px;line-height:1.6">Pages already in the shared store join your index instantly at the same price — coverage compounds from demand, and every page keeps its original receipt.</p>
+    </section>
+
+    <section data-screen-label="Act 3 — Proof" style="padding:52px 0 44px">
+      
+        <div style="font-size:11px;letter-spacing:0.16em;color:#6A6E60;margin-bottom:22px">03 — THE PROOF</div>
+      
+      <h2 style="margin:0 0 26px;font-size:22px;font-weight:600;letter-spacing:-0.02em">How a result proves itself.</h2>
+
+      <div style="display:grid;gap:24px;grid-template-columns:repeat(auto-fit,minmax(min(100%,15rem),1fr))">
+        <div style="border-top:1px solid #171A14;padding-top:12px">
+          <div style="font-size:13.5px;font-weight:600;margin-bottom:6px">An honest crawler</div>
+          <p style="margin:0;font-size:13px;color:#3C4137;line-height:1.6">WuzzyBot announces itself, respects robots.txt, and where a site posts a machine-access price, pays it or skips — never evades.</p>
+        </div>
+        <div style="border-top:1px solid #171A14;padding-top:12px">
+          <div style="font-size:13.5px;font-weight:600;margin-bottom:6px">An attested fetch</div>
+          <p style="margin:0;font-size:13px;color:#3C4137;line-height:1.6">Each page's content hash, URL, and fetch time are attested on Base under a versioned public protocol.</p>
+        </div>
+        <div style="border-top:1px solid #171A14;padding-top:12px">
+          <div style="font-size:13.5px;font-weight:600;margin-bottom:6px">A replayable claim</div>
+          <p style="margin:0;font-size:13px;color:#3C4137;line-height:1.6">Anyone can recompute a hash from the live page and dispute ours — <span style="background:#E6E3D8;padding:1px 4px">wuzzy verify &lt;url&gt;</span> does it in one command.</p>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:32px">
+        <a href="#" style="border:1px solid #C9C6B8;background:#FCFBF6;padding:8px 12px;font-size:12.5px;text-decoration:none;color:#3C4137">Attestation schema on Base</a>
+        <a href="#" style="border:1px solid #C9C6B8;background:#FCFBF6;padding:8px 12px;font-size:12.5px;text-decoration:none;color:#3C4137">A settled query on Basescan</a>
+        <a href="#" style="border:1px solid #C9C6B8;background:#FCFBF6;padding:8px 12px;font-size:12.5px;text-decoration:none;color:#3C4137">Source on GitHub</a>
+        <a href="#" style="border:1px solid #C9C6B8;background:#FCFBF6;padding:8px 12px;font-size:12.5px;text-decoration:none;color:#3C4137">VERIFY.md</a>
+        <a href="#" style="border:1px solid #C9C6B8;background:#FCFBF6;padding:8px 12px;font-size:12.5px;text-decoration:none;color:#3C4137">x402 Bazaar listing</a>
+      </div>
+    </section>
+
+    <footer style="display:flex;flex-wrap:wrap;gap:18px;align-items:center;padding:16px 0 40px;border-top:1.5px solid #171A14;font-size:12.5px;color:#6A6E60">
+      <img src="../../apps/frontend/public/brand/wuzzy-mark.png" alt="" width="20" height="20" style="display:block;width:20px;height:20px;opacity:0.75" />
+      <span>Built by Memetic Block</span>
+      <a href="#">Privacy</a>
+      <a href="#">Terms</a>
+      <a href="#">Contact</a>
+    </footer>
+
+  </div>
+</div>
+
+
+
+</body>
+</html>

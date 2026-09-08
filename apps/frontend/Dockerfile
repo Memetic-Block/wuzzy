@@ -17,6 +17,10 @@ RUN bun install --frozen-lockfile --linker=hoisted
 COPY tsconfig.json tsconfig.base.json ./
 COPY packages/static-site ./packages/static-site
 COPY apps/frontend ./apps/frontend
+# The 402 the homepage prints is a captured exchange, not a template, so the
+# capture is a build input. Only this subtree: the canonicalize vectors are the
+# other thing under fixtures/ and the site does not read them.
+COPY fixtures/examples ./fixtures/examples
 
 # src/site.config.ts is read while the pages are rendered, so these are build
 # args rather than runtime environment: the values are baked into the HTML and
@@ -56,6 +60,10 @@ RUN bun install --frozen-lockfile --linker=hoisted
 COPY tsconfig.json tsconfig.base.json ./
 COPY packages/static-site ./packages/static-site
 COPY apps/frontend ./apps/frontend
+# The 402 the homepage prints is a captured exchange, not a template, so the
+# capture is a build input. Only this subtree: the canonicalize vectors are the
+# other thing under fixtures/ and the site does not read them.
+COPY fixtures/examples ./fixtures/examples
 
 # CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID come from Vault via the job;
 # PROJECT_NAME selects the Pages project. Nothing here defaults them: a missing

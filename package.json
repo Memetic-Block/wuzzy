@@ -16,6 +16,7 @@
     "demo": "bun apps/demo-agent/src/main.ts",
     "demo:embeddings": "bun scripts/demo/stub-embeddings.ts",
     "demo:facilitator": "bun scripts/demo/mock-facilitator.ts",
+    "capture-examples": "bun scripts/capture-examples.ts",
     "check:facilitator": "bun apps/backend/src/cli/check-facilitator.ts"
   },
   "devDependencies": {
