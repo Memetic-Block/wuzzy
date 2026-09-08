@@ -134,6 +134,11 @@ services:
       EMBEDDING_BASE_URL: http://embeddings:39500
       BASE_RPC_URL: http://chain:8545
     command: ["bun", "apps/backend/src/worker.ts"]
+    # The image healthchecks an HTTP port the worker does not listen on, so
+    # without this it reports unhealthy for its whole life while crawling
+    # perfectly well.
+    healthcheck:
+      disable: true
     depends_on:
       # The API owns the migration, and the worker's first query is against a
       # table it creates. Waiting on postgres alone is a race that only shows

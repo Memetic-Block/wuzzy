@@ -163,6 +163,11 @@ services:
       context: .
       dockerfile: apps/backend/Dockerfile
     command: ["bun", "apps/backend/src/worker.ts"]
+    # The image healthchecks an HTTP port the worker does not listen on, so
+    # without this it reports unhealthy for its whole life while crawling
+    # perfectly well.
+    healthcheck:
+      disable: true
     environment:
       POSTGRES_HOST: postgres
       REDIS_HOST: redis
