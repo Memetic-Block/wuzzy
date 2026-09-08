@@ -8,6 +8,7 @@ import {
   type PaymentPayload,
   type PaymentRequirements,
 } from 'x402/types';
+import { createFacilitatorConfig } from '@coinbase/x402';
 import { useFacilitator } from 'x402/verify';
 import { PAYMENT_CONFIG, type PaymentConfig } from './payment.config';
 
@@ -65,13 +66,61 @@ export type PaymentOutcome =
  * 402 when the header is absent, malformed or unmatched, verify with the
  * facilitator, then settle only after the handler has produced a response.
  */
+/**
+ * How to reach the facilitator, which is not the same question as where it is.
+ *
+ * Coinbase's is the one that settles on Base mainnet and it is authenticated,
+ * so reaching it means signing each request rather than just knowing a URL.
+ * Anything else -- a local facilitator for a fork rehearsal, the demo stack's
+ * mock, a test double -- is a bare URL and must not have credentials attached
+ * to it, so the two cases are kept apart here rather than merged behind an
+ * optional field.
+ */
+function facilitatorFor(config: PaymentConfig): Parameters<typeof useFacilitator>[0] {
+  const url = config.facilitatorUrl as `${string}://${string}`;
+  const isCoinbase = url.startsWith('https://api.cdp.coinbase.com/');
+
+  if (!isCoinbase) return { url };
+  // With the meter off there is nothing to settle and no credentials to need.
+  // The check below is for the case that actually matters: a meter that is on
+  // and cannot settle turns every payer away, and finding that out at startup
+  // is far better than finding it out from a customer.
+  if (!config.enabled) return { url };
+  if (!config.cdpApiKeyId || !config.cdpApiKeySecret) {
+    throw new Error(
+      "Coinbase's facilitator needs X402_CDP_API_KEY_ID and X402_CDP_API_KEY_SECRET. " +
+        'Set them, or point X402_FACILITATOR_URL at a facilitator that does not ' +
+        'authenticate. Note that the public one at x402.org settles testnets only.',
+    );
+  }
+  // Their config is typed against x402 v2 while this app is on v1, and the two
+  // disagree only about whether `url` may be undefined. Keeping the URL this
+  // app already validated and borrowing only the request signing avoids
+  // casting one whole config into the shape of another.
+  const cdp = createFacilitatorConfig(config.cdpApiKeyId, config.cdpApiKeySecret);
+  return {
+    url,
+    // v2 returns each set of headers as optional and v1 requires all three.
+    // An absent set means "add nothing", which is what the caller does with
+    // it: every one is spread into the request headers.
+    createAuthHeaders: async () => {
+      const signed = (await cdp.createAuthHeaders?.()) ?? {};
+      return {
+        verify: signed.verify ?? {},
+        settle: signed.settle ?? {},
+        supported: signed.supported ?? {},
+      };
+    },
+  };
+}
+
 @Injectable()
 export class PaymentService {
   private readonly logger = new Logger(PaymentService.name);
   private readonly facilitator: ReturnType<typeof useFacilitator>;
 
   constructor(@Inject(PAYMENT_CONFIG) private readonly config: PaymentConfig) {
-    this.facilitator = useFacilitator({ url: this.config.facilitatorUrl as `${string}://${string}` });
+    this.facilitator = useFacilitator(facilitatorFor(config));
   }
 
   get enabled(): boolean {

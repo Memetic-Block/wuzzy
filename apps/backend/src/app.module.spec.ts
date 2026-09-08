@@ -30,6 +30,11 @@ const isDatabaseUnreachable = (error: unknown): boolean => {
 
 describe('AppModule', () => {
   it('resolves every provider and serves /healthz', async () => {
+    // A meter that is on has to be able to settle, and the service refuses to
+    // start otherwise. That guard has its own coverage in payment.spec; here
+    // it just has to be satisfied, so the wiring is what gets tested.
+    process.env.X402_FACILITATOR_URL ??= 'http://127.0.0.1:39600';
+
     try {
       const compiled = await Test.createTestingModule({ imports: [AppModule] }).compile();
       app = compiled.createNestApplication();

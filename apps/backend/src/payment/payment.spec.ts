@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, describe, expect } from 'bun:test';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'bun:test';
 import 'reflect-metadata';
 import { Test } from '@nestjs/testing';
 import type { INestApplication } from '@nestjs/common';
@@ -15,13 +15,43 @@ import { IndexesService } from '../indexes/indexes.service';
 import { INDEXES_CONFIG, buildIndexesConfig } from '../indexes/index.config';
 import { globalIndexId, joinIndex, truncateWuzzyTables } from '../testing/database';
 import { scenario } from '../testing/scenario';
-import { PAYMENT_CONFIG, type PaymentConfig } from './payment.config';
+import { buildPaymentConfig, PAYMENT_CONFIG, type PaymentConfig } from './payment.config';
 import { PaymentService } from './payment.service';
 import { startMockFacilitator, type MockFacilitator } from './mock-facilitator';
 import { PROTOCOL } from '../canonicalize/v1';
 
 const DIMENSIONS = 1536;
 const PAY_TO = '0x2222222222222222222222222222222222222222';
+
+describe('facilitator selection', () => {
+  it('defaults to the facilitator that settles Base mainnet', () => {
+    // The public endpoint at x402.org answers /supported with base-sepolia and
+    // a list of other testnets, and no eip155:8453. It was this project's
+    // default, including in the live Nomad job, which would have produced a
+    // meter that 402s forever on mainnet.
+    const config = buildPaymentConfig({});
+    expect(config.facilitatorUrl).toBe('https://api.cdp.coinbase.com/platform/v2/x402');
+    expect(config.facilitatorUrl).not.toContain('x402.org');
+  });
+
+  it('refuses to talk to Coinbase without credentials', () => {
+    // Failing here is the point: the alternative is a running meter that
+    // cannot settle, discovered when a payer's first request is rejected.
+    const build = () =>
+      new PaymentService(buildPaymentConfig({ X402_PAY_TO: '0x1' }));
+    expect(build).toThrow(/X402_CDP_API_KEY_ID/);
+  });
+
+  it('leaves a self-hosted facilitator alone', () => {
+    // A fork rehearsal, the demo stack's mock and the tests all point at a
+    // local URL, and none of them should have credentials attached.
+    const config = buildPaymentConfig({
+      X402_FACILITATOR_URL: 'http://127.0.0.1:39601',
+      X402_PAY_TO: '0x1',
+    });
+    expect(() => new PaymentService(config)).not.toThrow();
+  });
+});
 
 /** Deterministic stand-in: no network, and similarity still behaves sensibly. */
 const stubEmbedder = (): Embedder => ({

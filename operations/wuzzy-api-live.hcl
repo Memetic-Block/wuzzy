@@ -53,7 +53,6 @@ job "wuzzy-api-live" {
         X402_ENABLED          = "true"
         X402_NETWORK          = "base"
         X402_PRICE            = "$0.01"
-        X402_FACILITATOR_URL  = "https://x402.org/facilitator"
 
         # The free box is opt-in, and the site calls it cross-origin because
         # Cloudflare Pages has no proxy in front of the static files.
@@ -83,6 +82,9 @@ job "wuzzy-api-live" {
         POSTGRES_PORT={{ .Port }}
         {{- end }}
         {{- with secret "kv/wuzzy/api" }}
+        {{- /* Coinbase settles Base mainnet; x402.org is testnet-only. */}}
+        X402_CDP_API_KEY_ID={{ .Data.data.X402_CDP_API_KEY_ID }}
+        X402_CDP_API_KEY_SECRET={{ .Data.data.X402_CDP_API_KEY_SECRET }}
         POSTGRES_PASSWORD={{ .Data.data.POSTGRES_PASSWORD }}
         EMBEDDING_API_KEY={{ .Data.data.EMBEDDING_API_KEY }}
         X402_PAY_TO={{ .Data.data.X402_PAY_TO }}
