@@ -112,7 +112,17 @@ export class NotPermittedError extends Error {}
  * `/search`, not a separate deployment.
  */
 export function apiBase(searchEndpoint: string): string {
-  return searchEndpoint.replace(/\/search\/?$/, '') || searchEndpoint;
+  return searchEndpoint.replace(/\/search\/?$/, '').replace(/\/$/, '') || searchEndpoint;
+}
+
+/**
+ * The search URL, given either spelling of that same setting. `--endpoint` is
+ * one flag for the whole agent and every other command takes the API's base,
+ * so accepting only the full search URL here would make one flag mean two
+ * things depending on the subcommand.
+ */
+export function searchUrl(endpoint: string): string {
+  return /\/search\/?$/.test(endpoint) ? endpoint : `${apiBase(endpoint)}/search`;
 }
 
 /**

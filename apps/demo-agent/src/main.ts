@@ -16,6 +16,7 @@ import {
   NotPermittedError,
   PageCapError,
   quote,
+  searchUrl,
   type CommissionOutcome,
   type IndexStatus,
 } from './indexes';
@@ -38,7 +39,8 @@ const USAGE = `wuzzy demo agent
   demo append <index> <url>...  add pages to an index you own
   demo status <index>         how far along an index is (free)
 
-  --endpoint=<url>            default https://wuzzy.io/search, or WUZZY_ENDPOINT
+  --endpoint=<url>            the API's base or its /search URL, either way.
+                              Default https://wuzzy.io/search, or WUZZY_ENDPOINT
   --network=<base|base-sepolia>
   --top=<n>                   results to request (default 5)
   --index=<id|slug>           search one index instead of the global one
@@ -178,12 +180,13 @@ async function main(argv: readonly string[]): Promise<number> {
   }
 
   console.log(wallet ? `paying as ${wallet.address}` : 'no wallet: trying unpaid first');
-  console.log(`querying  ${endpoint}${flag('index') ? ` (index ${flag('index')})` : ''}`);
+  const url = searchUrl(endpoint);
+  console.log(`querying  ${url}${flag('index') ? ` (index ${flag('index')})` : ''}`);
 
   let outcome;
   try {
     outcome = await paidSearch({
-      endpoint,
+      endpoint: url,
       query,
       privateKey: wallet?.privateKey,
       network,
