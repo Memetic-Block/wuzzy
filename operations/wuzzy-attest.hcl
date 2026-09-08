@@ -37,7 +37,11 @@ job "wuzzy-attest" {
   }
 
   vault {
-    policies = ["wuzzy-attester"]
+    # Both, because the templates below read both paths: the schema uid and the
+    # database password from kv/wuzzy/api, the funded key from
+    # kv/wuzzy/attester. Declaring only one renders an empty value into the
+    # environment and the job fails on a missing variable at start.
+    policies = ["wuzzy-api", "wuzzy-attester"]
   }
 
   group "wuzzy-attest-group" {

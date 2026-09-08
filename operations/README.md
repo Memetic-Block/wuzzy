@@ -11,8 +11,51 @@ machine that can reach the `mb-hel` cluster; see [MANUAL-DEPLOY.md](MANUAL-DEPLO
 | [wuzzy-frontend-static-live.hcl](wuzzy-frontend-static-live.hcl) | batch | `meta.env=edge-worker` | Builds the site and pushes it to Cloudflare Pages. |
 | [wuzzy-frontend-static-stage.hcl](wuzzy-frontend-static-stage.hcl) | batch | `meta.env=edge-worker` | The same, to `stage.wuzzy.io`. |
 | [wuzzy-admin.hcl](wuzzy-admin.hcl) | service | `meta.env=store` | Operations view on an internal hostname, with its own backend. |
-| [wuzzy-pipeline.hcl](wuzzy-pipeline.hcl) | periodic batch | `meta.env=store` | Nightly crawl then embed. |
-| [wuzzy-attest.hcl](wuzzy-attest.hcl) | batch | `meta.env=store` | Writes attestations to Base. Run by a human. |
+| [wuzzy-redis.hcl](wuzzy-redis.hcl) | service | `meta.env=store` | Broker for the crawl and attest queues. No persistence, by design. |
+| [wuzzy-worker.hcl](wuzzy-worker.hcl) | service | `meta.env=store` | Crawls and embeds what was paid for. Scale with `count`. |
+| [wuzzy-attester.hcl](wuzzy-attester.hcl) | service | `meta.env=store` | Writes the receipts. Holds the funded key. **Exactly one.** |
+| [wuzzy-pipeline.hcl](wuzzy-pipeline.hcl) | periodic batch | `meta.env=store` | Nightly crawl then embed, global index only. **Parked: not deployed.** |
+| [wuzzy-attest.hcl](wuzzy-attest.hcl) | batch | `meta.env=store` | Corpus-wide attestation backfill. Run by a human. |
+
+## What runs when
+
+Two engines, and they do different work:
+
+- **The queue** fulfils paid work. A commission settles, the API writes what is owed and
+  enqueues, a worker crawls and embeds it, and the attester writes the receipts. Minutes, not
+  overnight, because somebody paid and a batch window is not a defensible latency.
+- **The nightly pipeline** keeps the *global* index current. It is the only thing that
+  discovers new pages by following links and sitemaps, and the only thing that re-fetches a
+  page that was already crawled successfully, using `--max-age` so a changed page invalidates
+  its embedding and its attestation. The queue never revisits a URL it has satisfied.
+
+So the pipeline is not redundant with the queue, and neither replaces the other.
+
+**It is parked, deliberately, and is not part of the current deploy.** The work in front of us
+is the demo and dogfooding it, both of which exercise the paid path: commission, crawl, embed,
+attest, search. Recrawling and refresh serve a corpus that is being maintained over months,
+which is not what is being demonstrated. `wuzzy-pipeline.hcl` stays in this directory and stays
+unsubmitted; the global index is seeded by running `wuzzy crawl` by hand when it needs to be.
+
+Two consequences to hold, rather than to fix now:
+
+- **Nothing is ever re-fetched.** Every index, global included, holds whatever its pages said on
+  the day they were crawled. The attestation stays truthful, because it records the fetch date,
+  but a receipt makes stale content look checked rather than merely dated.
+- **A commissioned index is never refreshed** even once the pipeline does run, because the
+  sweeper's work queue is `crawled_at IS NULL` and the nightly job only targets global. Whether
+  refresh is included in the page price, subscribed to, or bought again is an open product
+  decision, and it is the one to make before selling indexes to anyone who keeps them.
+
+## Order of deployment
+
+Nothing here waits politely for a dependency that is absent, so submit in this order:
+
+    wuzzy-db  ->  wuzzy-redis  ->  wuzzy-api-*  ->  wuzzy-worker  ->  wuzzy-attester
+
+The API discovers Redis through Consul and logs an enqueue failure rather than failing a paid
+request, so a missing broker degrades to sweeper latency instead of losing work. A worker with
+no database exits and is restarted until there is one.
 
 ## Three decisions worth knowing
 
@@ -28,9 +71,14 @@ reduce the access decision to a Cloudflare Access rule, which is a control that 
 off by mistake; a hostname that does not resolve outside the network cannot be. It carries its
 own backend instance, because the public API runs `ADMIN_ENABLED=false` and must keep doing so.
 
-**Attesting is never automated.** It spends money and signs with a funded key. The key is
-rendered from Vault into the task at run time, so it is not in this repository, the image, or
-on a developer machine. The job is idempotent and resumable, so re-running after a partial
+**Attesting spends money, so it is isolated rather than forbidden.** It used to be a job a
+human submitted; it is now continuous, because an index carrying no receipts is not the product
+being sold. What has not changed is the containment: the funded key is rendered from Vault into
+one task at run time, so it is not in this repository, the image, or on a developer machine, and
+the crawl workers that scale freely never carry one. `wuzzy-attester` is **count = 1** and that
+is not a tuning knob: a second would sign from the same account, build against the same nonce,
+and discard a transaction it had already paid for. Both it and the backfill job are idempotent
+and resumable, because the work queue is documents with no uid, so re-running after a partial
 failure is the intended recovery rather than a risk.
 
 ## Replacing the old site
@@ -99,13 +147,24 @@ Before a first deploy someone has to create:
 
 - **A Nomad host volume `wuzzy-db`** on the `store` node, for the database.
 - **Vault `kv/wuzzy/api`** with `POSTGRES_PASSWORD`, `EMBEDDING_API_KEY`, `X402_PAY_TO`,
-  `EAS_SCHEMA_UID`, `ADMIN_TOKEN`, and a `wuzzy-api` policy that reads it.
+  `EAS_SCHEMA_UID`, `ADMIN_TOKEN`, `X402_CDP_API_KEY_ID`, `X402_CDP_API_KEY_SECRET`, and a
+  `wuzzy-api` policy that reads it. Write these with `vault kv patch`, never `put`: `put`
+  replaces every field in the secret and would drop the rest of them.
 - **Vault `kv/wuzzy/attester`** with `ATTESTER_PRIVATE_KEY`, and a `wuzzy-attester` policy.
-  Separate from the above so the API's token cannot read the signing key.
+  Separate from the above so the API's token cannot read the signing key. The attester and
+  backfill jobs declare **both** policies, because they read the database password and schema
+  uid from one path and the key from the other; that does not weaken the separation, since the
+  API job still declares only `wuzzy-api` and so cannot reach the key.
 - **DNS records**, per the table above.
 - **A `wuzzy-frontend-deploy` image in CI.** The frontend Dockerfile has the stage
   (`--target deploy`); the workflow does not build it yet.
-- **The EAS schema registered** on Base mainnet, which produces the `EAS_SCHEMA_UID` above.
-  Its value is already known: see [SCHEMA.md](../SCHEMA.md).
+
+The EAS schema is registered on Base mainnet already, so `EAS_SCHEMA_UID` is a known value
+rather than something to produce: see [SCHEMA.md](../SCHEMA.md).
+
+**Fund the attester before submitting `wuzzy-attester`.** It attests continuously, including the
+global index, so it starts spending as soon as it can reach a database. A full pass over the
+existing corpus is roughly 0.009 ETH at the gas in SCHEMA.md; send meaningfully more, because a
+run that dies out of gas is only recoverable by funding it again.
 
 The database has no backup job. That is a real gap, not an oversight to discover later.

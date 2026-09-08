@@ -55,6 +55,12 @@ job "wuzzy-api-stage" {
         X402_NETWORK          = "base"
         X402_PRICE            = "$0.01"
 
+        # Per page to commission an index. It buys the crawl, the embedding and
+        # the onchain attestation together, so it has to cover gas: a receipt is
+        # a bit over half a cent at the gas in SCHEMA.md. Set here rather than
+        # left to the code default so the deployed price is visible in the spec.
+        WUZZY_INDEX_PRICE_PER_PAGE = "$0.02"
+
         # The free box is opt-in, and the site calls it cross-origin because
         # Cloudflare Pages has no proxy in front of the static files.
         WEB_SEARCH_ENABLED     = "true"
@@ -81,6 +87,12 @@ job "wuzzy-api-stage" {
         {{- range service "wuzzy-db" }}
         POSTGRES_HOST={{ .Address }}
         POSTGRES_PORT={{ .Port }}
+        {{- end }}
+        {{- /* The API only enqueues; workers drain. Without this a paid crawl
+               waits for the sweeper instead of starting in seconds. */}}
+        {{- range service "wuzzy-redis" }}
+        REDIS_HOST={{ .Address }}
+        REDIS_PORT={{ .Port }}
         {{- end }}
         {{- with secret "kv/wuzzy/api" }}
         {{- /* Coinbase settles Base mainnet; x402.org is testnet-only. */}}

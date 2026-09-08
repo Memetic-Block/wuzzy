@@ -30,27 +30,51 @@ the specs stay clean in git. Omitting a required variable fails at parse time wi
 
 ## Order matters on a first deploy
 
-The API will not start without a database, and the pipeline will not run without a schema.
+The API will not start without a database, and nothing will run without a schema.
+
+`wuzzy-pipeline.hcl` is **not** in this list. Nightly recrawl and refresh are parked while the
+work is the demo and dogfooding it; the global index is seeded by hand with `wuzzy crawl` when
+it needs to be. See [README.md](README.md) for what that defers.
 
     # 1. Database first. It has no dependencies.
     nomad job run operations/wuzzy-db.hcl
 
-    # 2. Migrations, against the running database. There is no auto-migrate:
+    # 2. The queue's broker. No volume and no migration; it holds no truth.
+    nomad job run operations/wuzzy-redis.hcl
+
+    # 3. Migrations, against the running database. There is no auto-migrate:
     #    `synchronize` is false everywhere, so this is deliberate every time.
     nomad alloc exec -task wuzzy-api-live-task <alloc> \
       sh -c 'cd apps/backend && bun run migration:run'
 
-    # 3. API.
+    # 4. API.
     nomad job run -var="commit_sha=${SHA}" -var="release_tag=0.1.0" \
       operations/wuzzy-api-live.hcl
 
-    # 4. Site.
+    # 5. Crawl workers. The API only enqueues; without these a paid commission
+    #    is recorded, charged and never fetched.
+    nomad job run -var="commit_sha=${SHA}" operations/wuzzy-worker.hcl
+
+    # 6. The attester. FUND IT FIRST: it starts writing receipts, including for
+    #    the global index, as soon as it can reach the database.
+    nomad job run -var="commit_sha=${SHA}" operations/wuzzy-attester.hcl
+
+    # 7. Site.
     nomad job run -var="commit_sha=${SHA}" -var="commit_timestamp=${TS}" \
       -var="release_tag=0.1.0" operations/wuzzy-frontend-static-live.hcl
 
-Step 2 is a chicken-and-egg: the API image carries the migration CLI, so run the API first,
+Step 3 is a chicken-and-egg: the API image carries the migration CLI, so run the API first,
 let its health check fail, exec the migration, and it recovers. Alternatively run the
 migration from any machine with the repo and a route to the database.
+
+Steps 5 and 6 are not optional extras. The API takes payment and writes what is owed; the
+worker is what fetches it and the attester is what proves it. Deploying only the API sells
+an index that never fills.
+
+**`wuzzy-attester` is `count = 1`, permanently.** Every batch is a transaction from one funded
+account, so a second instance signs against the same nonce and discards a transaction it has
+already paid for. Scale crawling with `wuzzy-worker`'s `count`; attestation scales by batch
+size instead.
 
 ## Deploying the site
 
