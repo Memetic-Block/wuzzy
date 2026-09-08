@@ -73,7 +73,12 @@ Three things about the compose file are load-bearing, and each is a mistake alre
 service from the sibling `wuzzy-docs` checkout. Build it there first, because the service
 mounts the built output:
 
-    (cd ../wuzzy-docs && bun run build)
+    (cd ../wuzzy-docs && DOCS_HOSTNAME=localhost:4000 bun run build)
+
+`DOCS_HOSTNAME` matters as much as the build does. The generated `sitemap.xml`, `llms.txt` and
+`robots.txt` carry absolute URLs, and without it they default to the rspress dev origin,
+`localhost:5173`, which nothing here serves. A client that reads those two files then concludes
+the docs are somewhere it cannot reach, which is what the second dogfood run reported.
 
 It has to be the build, not `rspress dev`: dev mode renders on the client, so an agent fetching
 a page over HTTP gets an empty shell and concludes there is no documentation. Point the service
