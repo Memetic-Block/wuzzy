@@ -35,7 +35,11 @@ job "wuzzy-frontend-static-stage" {
 
       env {
         PROJECT_NAME  = "wuzzy-site-stage"
-        PAGES_BRANCH  = "stage"
+        # MUST equal the Pages project's configured production branch, the way
+        # `main` does for wuzzy-site-live. Confirm this one in the Cloudflare
+        # dashboard before trusting a stage deploy: a mismatch does not fail, it
+        # quietly publishes to a preview URL instead.
+        PAGES_BRANCH  = "main"
         COMMIT_SHA    = "c218113cfe70644a48bbc430ec046dddf670851d"
 
         # Read by apps/frontend/src/site.config.ts while the pages render.

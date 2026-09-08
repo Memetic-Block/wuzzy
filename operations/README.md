@@ -93,6 +93,12 @@ These specs deploy to the **same Pages projects**, `wuzzy-site-live` and `wuzzy-
 the cutover needs no DNS change and no new custom domain binding. The tradeoff is that two
 repositories can then publish to one project, and the last deploy wins.
 
+`PAGES_BRANCH` has to equal each project's **configured production branch**, which is `main`,
+not the environment name. Cloudflare compares that string to the project setting to decide
+production versus preview, and a mismatch does not fail: the job succeeds, prints a deployed
+URL, and publishes to a `*.pages.dev` preview while the custom domain keeps serving whatever it
+had. That is how the first cutover attempt appeared to work and changed nothing.
+
 So the cutover is: deploy from here, confirm, then stop the old job and archive that repo.
 
     nomad job stop -purge wuzzy-site-static-live

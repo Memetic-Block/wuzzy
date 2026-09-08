@@ -35,7 +35,13 @@ job "wuzzy-frontend-static-live" {
 
       env {
         PROJECT_NAME  = "wuzzy-site-live"
-        PAGES_BRANCH  = "live"
+        # MUST equal the Pages project's configured production branch, which is
+        # `main` for wuzzy-site-live. Cloudflare decides production versus
+        # preview by comparing this string to that setting, so a mismatch is not
+        # an error: the deploy succeeds, reports a URL, and lands on a
+        # *.pages.dev preview while wuzzy.io keeps serving whatever it had. It
+        # is named for a git branch but nothing here has one; it is a label.
+        PAGES_BRANCH  = "main"
         COMMIT_SHA    = "c218113cfe70644a48bbc430ec046dddf670851d"
 
         # Read by apps/frontend/src/site.config.ts while the pages render.
