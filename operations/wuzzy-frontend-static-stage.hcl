@@ -41,7 +41,7 @@ job "wuzzy-frontend-static-stage" {
       driver = "docker"
 
       config {
-        image = "ghcr.io/memetic-block/wuzzy-frontend-deploy:${var.commit_sha}"
+        image = "ghcr.io/memetic-block/wuzzy-frontend-deploy:sha-${var.commit_sha}"
       }
 
       env {

@@ -40,7 +40,7 @@ job "wuzzy-api-live" {
       driver = "docker"
 
       config {
-        image = "ghcr.io/memetic-block/wuzzy-backend:${var.commit_sha}"
+        image = "ghcr.io/memetic-block/wuzzy-backend:sha-${var.commit_sha}"
         ports = ["http"]
       }
 

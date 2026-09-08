@@ -45,7 +45,7 @@ job "wuzzy-admin" {
       driver = "docker"
 
       config {
-        image = "ghcr.io/memetic-block/wuzzy-backend:${var.commit_sha}"
+        image = "ghcr.io/memetic-block/wuzzy-backend:sha-${var.commit_sha}"
         ports = ["api"]
       }
 
@@ -87,7 +87,7 @@ job "wuzzy-admin" {
       driver = "docker"
 
       config {
-        image = "ghcr.io/memetic-block/wuzzy-admin:${var.commit_sha}"
+        image = "ghcr.io/memetic-block/wuzzy-admin:sha-${var.commit_sha}"
         ports = ["http"]
       }
 

@@ -12,7 +12,11 @@ the cluster, the same arrangement as `wuzzy-site`.
   secrets itself, so you do not need Vault credentials locally.
 - The image for the commit must already exist:
 
-      docker manifest inspect ghcr.io/memetic-block/wuzzy-backend:<sha>
+      docker manifest inspect ghcr.io/memetic-block/wuzzy-backend:sha-<sha>
+
+  CI publishes `sha-<full sha>` and, for master, `latest`. It never publishes a bare sha, so
+  the job specs add the `sha-` prefix themselves and every `-var="commit_sha=..."` takes a
+  plain git sha.
 
   CI only publishes on a successful run, so a commit whose workflow failed has no image and
   cannot be deployed.
@@ -44,8 +48,9 @@ it needs to be. See [README.md](README.md) for what that defers.
 
     # 3. Migrations, against the running database. There is no auto-migrate:
     #    `synchronize` is false everywhere, so this is deliberate every time.
-    nomad alloc exec -task wuzzy-api-live-task <alloc> \
-      sh -c 'cd apps/backend && bun run migration:run'
+    #    A batch job that applies what is pending and exits; idempotent, so
+    #    re-running it on an up-to-date database does nothing and succeeds.
+    nomad job run -var="commit_sha=${SHA}" operations/wuzzy-migrate.hcl
 
     # 4. API.
     nomad job run -var="commit_sha=${SHA}" -var="release_tag=0.1.0" \
@@ -63,9 +68,15 @@ it needs to be. See [README.md](README.md) for what that defers.
     nomad job run -var="commit_sha=${SHA}" -var="commit_timestamp=${TS}" \
       -var="release_tag=0.1.0" operations/wuzzy-frontend-static-live.hcl
 
-Step 3 is a chicken-and-egg: the API image carries the migration CLI, so run the API first,
-let its health check fail, exec the migration, and it recovers. Alternatively run the
-migration from any machine with the repo and a route to the database.
+Step 3 used to be a chicken-and-egg, run by deploying the API first, letting its health check
+fail and exec-ing into the allocation. `wuzzy-migrate.hcl` replaces that, and it is also the
+one job here that can be submitted from the Nomad UI with nothing filled in: its `commit_sha`
+defaults to `latest`. Pin the sha for anything other than deploying the tip of master.
+
+Do not reach for `bun run migration:run` inside a container. Bun's workspace install hoists
+packages to the repository root in the image, so the `apps/backend/node_modules` that script
+expects is not there and it fails with a module-not-found that reads nothing like a migration
+error. The job spec invokes the CLI at the path it actually has.
 
 Steps 5 and 6 are not optional extras. The API takes payment and writes what is owed; the
 worker is what fetches it and the attester is what proves it. Deploying only the API sells
