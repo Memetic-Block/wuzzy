@@ -33,6 +33,20 @@ export interface AttestOptions {
    * draining, so one customer's pages are not held up behind another's.
    */
   readonly indexId?: string;
+  /**
+   * Called after each batch lands. A pass over a large index is many
+   * transactions and takes minutes, and reporting only at the end makes a
+   * working attester indistinguishable from a stuck one: the buyer sees
+   * `attestations: 0` against pages they have already paid for, and the log
+   * says nothing until it is over.
+   */
+  readonly onBatch?: (progress: AttestProgress) => void;
+}
+
+export interface AttestProgress {
+  readonly attested: number;
+  readonly total: number;
+  readonly batches: number;
 }
 
 export interface AttestSummary {
@@ -107,6 +121,7 @@ export async function attestPending(
     }
     attested += requests.length;
     batches += 1;
+    options.onBatch?.({ attested, total: pending.length, batches });
   }
 
   return { attested, batches };

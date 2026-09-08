@@ -23,6 +23,14 @@ export class AttestSweeper implements OnApplicationBootstrap {
   private readonly logger = new Logger(AttestSweeper.name);
   private readonly intervalMs = Number(process.env.ATTEST_SWEEP_INTERVAL_MS ?? 60_000);
   private timer: ReturnType<typeof setInterval> | undefined;
+  /**
+   * What the last sweep found, so a steady state stays quiet. An attest pass
+   * over a large index takes many minutes, and every sweep during it re-enqueues
+   * a job id that already exists, which BullMQ correctly ignores. Logging that
+   * each time prints a line a minute that reads like a retry loop failing, next
+   * to a processor that says nothing until it finishes.
+   */
+  private previous = '';
 
   constructor(
     @InjectDataSource() private readonly dataSource: DataSource,
@@ -60,7 +68,18 @@ export class AttestSweeper implements OnApplicationBootstrap {
       }
     }
 
-    if (owed.length > 0) this.logger.log(`swept ${owed.length} index(es) awaiting attestation`);
+    const current = owed
+      .map((row) => row.index_id)
+      .sort()
+      .join(',');
+    if (current !== this.previous) {
+      if (owed.length > 0) {
+        this.logger.log(`swept ${owed.length} index(es) awaiting attestation`);
+      } else if (this.previous !== '') {
+        this.logger.log('every index is fully attested');
+      }
+      this.previous = current;
+    }
     return owed.length;
   }
 }

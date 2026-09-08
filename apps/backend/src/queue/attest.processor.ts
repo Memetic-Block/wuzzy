@@ -35,6 +35,10 @@ export class AttestProcessor extends WorkerHost {
     const summary = await attestPending(this.dataSource, {
       submitter: this.submitter,
       indexId,
+      onBatch: (progress) =>
+        this.logger.log(
+          `index ${indexId}: attested ${progress.attested}/${progress.total} document(s)`,
+        ),
     });
 
     this.logger.log(
