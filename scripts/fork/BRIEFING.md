@@ -53,4 +53,6 @@ money on it again. If something stopped you outright, say what you tried.
 - Search is running lexical-only, so ranking is keyword-driven rather than semantic. Judge the
   index on coverage rather than on how clever the ordering is.
 - Results may say a page is not yet attested onchain. That is a real state of the product, not
-  a fault: attesting is a separate step that costs gas, and it runs behind indexing.
+  a fault: the onchain receipt is included in what you pay to index a page, but it is written
+  after the page is crawled rather than in the same breath, so a page can be searchable for a
+  little while before its receipt lands.
