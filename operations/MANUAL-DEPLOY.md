@@ -85,9 +85,57 @@ Check for it explicitly after any restore:
 `could not resize shared memory segment` and the index can be created by hand once the shared
 memory is large enough.
 
+## Provisioning the attester
+
+Once, before the first attest run. The schema itself is already registered on Base mainnet;
+that was a separate one-time step and its UID is in [SCHEMA.md](../SCHEMA.md).
+
+**Generate the key where it is allowed to live.** Not on a laptop: the whole point of running
+attestation as a cluster job is that the funded key never reaches a developer machine, and a
+key pasted through a local terminal is in that machine's scrollback and shell history whatever
+happens to it afterwards. Generate it on the cluster and let only the address come back:
+
+    nomad alloc exec -task wuzzy-api-live-task <alloc> \
+      bun -e 'const w = require("ethers").Wallet.createRandom();
+              console.log("address", w.address);
+              console.log("key    ", w.privateKey)'
+
+**Write both secrets to Vault.** `EAS_SCHEMA_UID` is read from `kv/wuzzy/api` and the key from
+`kv/wuzzy/attester`, which is why the job declares two policies.
+
+    vault kv patch kv/wuzzy/attester ATTESTER_PRIVATE_KEY=0x...
+    vault kv patch kv/wuzzy/api \
+      EAS_SCHEMA_UID=0x15616641fbb8e7ee6a63f4904a622a154972e47453062c845845e1f2387f9f1a \
+      X402_CDP_API_KEY_ID=... X402_CDP_API_KEY_SECRET=...
+
+`patch`, not `put`. `vault kv put` replaces every field in the secret, so putting
+`EAS_SCHEMA_UID` into `kv/wuzzy/api` would silently drop `POSTGRES_PASSWORD` and everything
+else beside it, and the next API deploy would fail its health check for no visible reason.
+
+**Fund the address.** Any wallet, an ordinary transfer, Base mainnet. The browser wallet you
+already hold ETH in is fine; it never signs an attestation, it only funds the address that
+does. A full corpus run is about 0.017 ETH, so send meaningfully more than that: a run that
+dies out of gas half way is recoverable, but only by funding it again and re-running.
+
+**Check the balance before the run, not during it.**
+
+    cast balance <attester-address> --rpc-url https://mainnet.base.org --ether
+
+**Check the facilitator before anything quotes a price.** Wrong credentials and a facilitator
+that does not cover Base both surface the same way, as a payer being turned away, and both are
+free to rule out first:
+
+    X402_CDP_API_KEY_ID=... X402_CDP_API_KEY_SECRET=... bun run check:facilitator
+
+It asks the facilitator what it settles and fails unless that includes an exact payment on Base
+mainnet. It never prints the credentials.
+
 ## Attesting
 
-This one spends money. Read [SCHEMA.md](../SCHEMA.md) first for what it costs.
+This one spends money. Read [SCHEMA.md](../SCHEMA.md) first for what it costs, and provision
+the attester above first: with no key the job fails immediately with `ATTESTER_PRIVATE_KEY is
+not set`, and with no UID it fails with `EAS_SCHEMA_UID is not set`. Both are cheap failures,
+which is the intended behaviour: it refuses rather than attesting against a wrong schema.
 
     nomad job run -var="commit_sha=${SHA}" operations/wuzzy-attest.hcl
     nomad alloc logs -f <alloc-id>
@@ -97,8 +145,10 @@ the work queue is `attestation_uid IS NULL` and backfill happens per batch, so a
 fails part way leaves everything after the failure point still queued, and re-running is the
 intended recovery.
 
-Registering the schema is a separate one-time step, not a job. Its command and the resulting
-UID are in [SCHEMA.md](../SCHEMA.md).
+Registering the schema was a separate one-time step, not a job, and it is done: the UID and
+its registration transaction are in [SCHEMA.md](../SCHEMA.md). Note that a registered schema
+proves only that the schema exists. It is not evidence that any page has been attested, and
+`EAS_SCHEMA_URL` on the site should not be set on the strength of it alone.
 
 ## Verifying a deploy
 
@@ -108,6 +158,14 @@ UID are in [SCHEMA.md](../SCHEMA.md).
 
 A `402` proves the meter is on. A `200` there means `X402_ENABLED` is wrong and the index is
 being given away.
+
+A 402 does not prove a payment can be *settled*, though, which is a separate failure. Coinbase's
+facilitator is the one that settles Base mainnet; the public endpoint at x402.org answers
+`/supported` with base-sepolia and other testnets and no `eip155:8453`, so a deployment pointed
+there quotes prices nobody can pay. The API refuses to start with the meter on and no way to
+settle, so a successful boot is the check. Confirm what a facilitator covers before trusting it:
+
+    curl -s https://x402.org/facilitator/supported | grep -o 'eip155:[0-9]*' | sort -u
 
     curl -s -X POST https://api.wuzzy.io/web-search \
       -H 'content-type: application/json' -H 'Origin: https://wuzzy.io' \

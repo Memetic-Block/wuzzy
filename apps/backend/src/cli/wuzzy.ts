@@ -29,6 +29,8 @@ const USAGE = `wuzzy - provable crawl pipeline
                               --max-age=<days> re-fetch anything older (default 14)
   wuzzy embed                 embed every document the crawler left pending
   wuzzy attest                attest every embedded document that has no UID yet
+                              --limit=<n> stop after n documents, so a large
+                              corpus can be attested in affordable tranches
   wuzzy verify <url>          re-derive the hash for one indexed URL
 
 verify exit codes: 0 match, 1 mismatch, 2 not indexed
@@ -124,7 +126,14 @@ async function main(argv: readonly string[]): Promise<number> {
           }
           throw error;
         }
-        const summary = await attestPending(dataSource, { submitter });
+        // A tranche at a time is the difference between a run whose cost is
+        // known before it starts and one that is discovered while it spends.
+        const limitFlag = args.find((arg) => arg.startsWith('--limit='));
+        const limit = limitFlag ? Number(limitFlag.slice('--limit='.length)) : undefined;
+        const summary = await attestPending(dataSource, {
+          submitter,
+          ...(limit === undefined ? {} : { limit }),
+        });
         console.log(`attested ${summary.attested} document(s) in ${summary.batches} batch(es)`);
         return 0;
       }

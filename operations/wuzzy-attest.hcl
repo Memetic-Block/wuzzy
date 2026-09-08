@@ -18,8 +18,11 @@ variable "commit_sha" {
 # never double-attests. Re-running after a partial failure is safe and is the
 # intended recovery.
 #
-# Cost, measured against forked Base mainnet: 388,188 gas per attestation, about
-# $26 for a 4555-document corpus at 0.006 gwei. See SCHEMA.md.
+# Cost, estimated against live Base mainnet: 332,346 gas per attestation at the
+# default batch of 50, which is 92 transactions and about 0.017 ETH for a
+# 4555-document corpus at 0.011 gwei. Unbatched it is 388k each, so batching is
+# worth roughly 14%; past a batch of 25 it buys nothing. Fund the attester with
+# headroom, because the corpus grows and the base fee moves. See SCHEMA.md.
 job "wuzzy-attest" {
   datacenters = ["mb-hel"]
   type        = "batch"

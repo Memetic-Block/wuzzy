@@ -175,13 +175,32 @@ cast send 0x4200000000000000000000000000000000000020 \
   "register(string,address,bool)" \
   "string url,uint8 protocolVersion,bytes32 contentHash,bytes32 rawHash,uint64 fetchedAt" \
   0x0000000000000000000000000000000000000000 true \
-  --private-key "$ATTESTER_PRIVATE_KEY" --rpc-url https://mainnet.base.org
+  --rpc-url https://mainnet.base.org \
+  --ledger            # or: --account <name>, after `cast wallet import`
 ```
 
-Registration costs 187,121 gas, well under a cent on Base.
+The signer is deliberately not a `--private-key` flag. A funded key does not go in this repo, in
+a shell history or in an environment variable on a development machine, and registration is a
+one-off that a hardware wallet or an encrypted keystore signs just as easily. The same
+transaction can be sent from https://base.easscan.org/schema/create with a browser wallet, which
+keeps the key out of a terminal entirely.
 
-> As of 2026-09-07 this schema is **not yet registered** on Base mainnet or Base Sepolia. The
-> UID above is unclaimed and is what registration will produce.
+Registration cost 164,537 gas, well under a cent on Base. (An earlier figure of 187,121 was
+measured against the schema that still carried `string protocol`; the field list is the whole
+of the calldata that varies, so the shorter schema is cheaper.)
+
+This schema is **registered on Base mainnet**, in block 51018240, by
+`0x0Deb462437ab46F703fcd15F9cf9c9Ea6472EAcB`:
+
+| | |
+| --- | --- |
+| Transaction | [`0xb1429c00…dda3a`](https://basescan.org/tx/0xb1429c00e1b253fcc969ad66d89c24851c9b26b40b4961bac8d1f7bcc78dda3a) |
+| Schema | [`0x15616641…f9f1a`](https://base.easscan.org/schema/view/0x15616641fbb8e7ee6a63f4904a622a154972e47453062c845845e1f2387f9f1a) |
+| Gas used | 164,537 (0.000000987 ETH) |
+
+The stored definition was read back from the registry and rehashed: the UID above is reproduced
+from onchain state, not merely from this document. It is **not** registered on Base Sepolia, and
+does not need to be for mainnet attestations to verify.
 
 ## Cost
 
