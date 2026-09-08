@@ -47,9 +47,10 @@ const USAGE = `wuzzy demo agent
   --name=<text>               name for a commissioned index
   --private                   commission it unlisted, readable by an allowlist
   --reader=<0x...>            allow another wallet to read it (repeatable)
-  --max-spend=<usd>           ceiling for one command, default $0.10. An
-                              index costs per page, so commissioning a real
-                              one needs this raised deliberately.
+  --max-spend=<usd>           this client's own ceiling for one command,
+                              default $0.10. Not a server limit: an index
+                              costs per page, so commissioning a real one
+                              means raising this deliberately.
 `;
 
 function renderIndex(index: IndexStatus): void {
@@ -75,9 +76,11 @@ function renderSettlement(outcome: CommissionOutcome, network: string): void {
 }
 
 function render(outcome: SearchOutcome, network: string): void {
+  // No hits is a completed query, and it is charged for like any other. It
+  // used to return here, before the settlement line, so a paid miss looked
+  // exactly like a free one and the cost only showed up in the balance.
   if (outcome.results.length === 0) {
-    console.log('no results');
-    return;
+    console.log('no results (a completed query: searching is charged for, finding is not)');
   }
 
   for (const [index, result] of outcome.results.entries()) {
@@ -85,9 +88,10 @@ function render(outcome: SearchOutcome, network: string): void {
     console.log(`   ${result.url}`);
     console.log(`   score ${result.score.toFixed(4)}`);
     console.log(`   ${result.snippet}`);
-    const { protocol, protocolVersion, contentHash, fetchedAt } = result.provenance;
+    const { protocol, protocolVersion, contentHash, rawHash, fetchedAt } = result.provenance;
     console.log(`   provenance  ${protocol} v${protocolVersion}  fetched ${fetchedAt}`);
     console.log(`   contentHash ${contentHash}`);
+    if (rawHash) console.log(`   rawHash     ${rawHash}`);
     console.log(
       result.provenance.attestationUrl
         ? `   attestation ${result.provenance.attestationUrl}`
@@ -303,8 +307,9 @@ async function commission(
       // ceiling is the point, and a caller who hits it needs the number and
       // the flag, not a stack trace from inside a dependency.
       console.error(
-        `\nthat is above the ${usdOf(maxValue)} ceiling for this command.` +
-          `\nre-run with --max-spend=${(Number(priced.atomic) / 1_000_000).toFixed(2)} to approve it.`,
+        `\nnot spent: ${usdOf(maxValue)} is this client's own ceiling, not a limit on the` +
+          `\nindex or a refusal from the server. Nothing has been paid.` +
+          `\n\nre-run with --max-spend=${(Number(priced.atomic) / 1_000_000).toFixed(2)} to approve it.`,
       );
       return 1;
     }

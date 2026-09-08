@@ -12,6 +12,16 @@ export interface SearchProvenance {
   readonly protocol: string;
   readonly protocolVersion: number;
   readonly contentHash: string;
+  /**
+   * Hash of the bytes the origin served, before canonicalization.
+   *
+   * Reported alongside contentHash because without it the only checkable claim
+   * is one you can reproduce solely by re-running our own procedure. The raw
+   * hash is what lets someone compare against the wire bytes they fetched
+   * themselves, and it is the field an unattested result most needs, since
+   * there is no UID to look up yet.
+   */
+  readonly rawHash: string;
   readonly fetchedAt: string;
   readonly attestationUid: string | null;
   readonly attestationUrl: string | null;
@@ -53,6 +63,15 @@ export interface SearchPage {
   readonly total: number;
   readonly exhaustive: boolean;
   readonly hasMore: boolean;
+  /**
+   * Which retrieval actually ran, not which one the docs describe.
+   *
+   * A deployment with no embedding provider serves `lexical` however the
+   * documentation reads, and the difference is visible in result order rather
+   * than in an error. Saying so per response is what lets a client tell a
+   * ranking it should judge from one it should not.
+   */
+  readonly mode: SearchMode;
 }
 
 interface VectorHit {
@@ -67,6 +86,7 @@ interface ChunkRow {
   title: string | null;
   snippet: string;
   content_hash: string;
+  raw_hash: string;
   fetched_at: Date;
   attestation_uid: string | null;
   protocol: string;
@@ -158,12 +178,13 @@ export class SearchService {
       total: documents.length,
       exhaustive,
       hasMore: false,
+      mode: effectiveMode,
     };
     if (page.length === 0) return { ...empty, hasMore: !exhaustive && documents.length > 0 };
 
     const rows: ChunkRow[] = await this.dataSource.query(
       `SELECT c.id AS chunk_id, d.url, d.title, c.text AS snippet, d.content_hash,
-              d.fetched_at, d.attestation_uid, d.protocol, d.protocol_version
+              d.raw_hash, d.fetched_at, d.attestation_uid, d.protocol, d.protocol_version
        FROM chunks c JOIN documents d ON d.id = c.document_id
        WHERE c.id = ANY($1::uuid[])`,
       [page.map((item) => item.chunkId)],
@@ -184,6 +205,7 @@ export class SearchService {
           protocol: row.protocol ?? PROTOCOL,
           protocolVersion: row.protocol_version ?? PROTOCOL_VERSION,
           contentHash: row.content_hash,
+          rawHash: row.raw_hash,
           fetchedAt: new Date(row.fetched_at).toISOString(),
           attestationUid: row.attestation_uid,
           attestationUrl: attestationUrl(row.attestation_uid),
@@ -191,7 +213,15 @@ export class SearchService {
       });
     }
 
-    return { results, offset, topK, total: documents.length, exhaustive, hasMore };
+    return {
+      results,
+      offset,
+      topK,
+      total: documents.length,
+      exhaustive,
+      hasMore,
+      mode: effectiveMode,
+    };
   }
 
   /**

@@ -19,7 +19,7 @@ Feature: x402-metered search
     When a client POSTs to /search with a valid x402 payment
     Then the response status is 200
     And each result includes url, title, snippet, and score
-    And each result's provenance block includes protocol, protocolVersion, contentHash, fetchedAt
+    And each result's provenance block includes protocol, protocolVersion, contentHash, rawHash, fetchedAt
     And each attested result includes its attestationUid and an easscan URL
 
   Scenario: malformed or insufficient payment is rejected

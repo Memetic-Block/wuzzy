@@ -240,6 +240,9 @@ describe('x402-metered search', () => {
       expect(result.provenance.protocol).toBe(PROTOCOL);
       expect(result.provenance.protocolVersion).toBe(1);
       expect(result.provenance.contentHash).toBe('b'.repeat(64));
+      // The bytes as served, which is the only claim a buyer can check
+      // against their own fetch while a result is still unattested.
+      expect(result.provenance.rawHash).toBe('a'.repeat(64));
       expect(result.provenance.fetchedAt).toBe('2026-02-01T00:00:00.000Z');
       expect(result.provenance.attestationUid).toBe(uid);
       expect(result.provenance.attestationUrl).toBe(

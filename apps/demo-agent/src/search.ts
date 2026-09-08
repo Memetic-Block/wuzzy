@@ -5,6 +5,8 @@ export interface SearchProvenance {
   readonly protocol: string;
   readonly protocolVersion: number;
   readonly contentHash: string;
+  /** The bytes as served, before canonicalization. Absent on older servers. */
+  readonly rawHash?: string;
   readonly fetchedAt: string;
   readonly attestationUid: string | null;
   readonly attestationUrl: string | null;
