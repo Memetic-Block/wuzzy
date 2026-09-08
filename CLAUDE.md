@@ -90,6 +90,24 @@ The queue is a trigger, never the record. What is owed is `index_urls` rows with
 outstanding. An unreachable Redis therefore delays a crawl and cannot lose one, which is why the
 API logs an enqueue failure rather than failing a request that has already been paid for.
 
+**A commissioned index is crawled, embedded and attested from that one payment.** Splitting any
+of those out would sell something that is not the product: an index nothing can find is not
+searchable, and one carrying no receipts is just search. So the crawl worker embeds what it
+fetched, then asks for attestation; `WUZZY_INDEX_PRICE_PER_PAGE` covers all three, which is why
+it is two cents rather than one. At the gas in [SCHEMA.md](SCHEMA.md) a receipt is a bit over
+half a cent, so the margin is real but thin, and doubling Base's fee market is what would make
+it negative.
+
+Attestation is its own queue and its own process, and that is the security boundary rather than
+a tidiness one. [attester.ts](apps/backend/src/attester.ts) is the only thing holding a funded
+key, so crawl workers can be scaled freely without spreading it. **Run exactly one attester**:
+every batch is a transaction from a single account, so a second would build against the same
+nonce and discard a transaction it had already paid for. Throughput is a bigger `multiAttest`
+batch, not more attesters. Its debt is derived rather than stored, embedded documents with no
+UID, so [queue/attest.sweeper.ts](apps/backend/src/queue/attest.sweeper.ts) can re-ask without
+anything recording that a receipt was bought, and a content change that clears a UID is
+re-attested by the same query.
+
 **apps/demo-agent must not import from apps/backend.** It is the integration quickstart a
 third party reads, so it has to demonstrate what an outsider can build with the public API
 alone, and it is expected to be split into its own repository by `git subtree split`. A

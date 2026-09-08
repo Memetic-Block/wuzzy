@@ -143,6 +143,34 @@ services:
       redis:
         condition: service_healthy
 
+  # Writes the onchain receipts, and the only process holding a funded key.
+  #
+  # Exactly one, never scaled: every batch is a transaction from a single
+  # account, so a second attester would build against the same nonce and throw
+  # away a transaction it had already paid for. More throughput is a bigger
+  # multiAttest batch.
+  attester:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+    command: ["bun", "apps/backend/src/attester.ts"]
+    env_file: scripts/fork/local/fork.env
+    environment:
+      POSTGRES_HOST: postgres
+      REDIS_HOST: redis
+      BASE_RPC_URL: http://chain:8545
+      # Anvil's first account: published, well known, funded only on a fork.
+      ATTESTER_PRIVATE_KEY: "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+    healthcheck:
+      disable: true
+    depends_on:
+      chain:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
   # This fork's own admin. Bound to loopback, and on a different port from the
   # demo stack's, so the two corpora cannot be mistaken for each other.
   admin:

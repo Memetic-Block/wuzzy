@@ -1,6 +1,5 @@
 import { EAS, NO_EXPIRATION } from '@ethereum-attestation-service/eas-sdk';
 import { ethers } from 'ethers';
-import { IsNull, Not } from 'typeorm';
 import type { DataSource } from 'typeorm';
 import { DocumentEntity } from '../database/document.entity';
 import { chainSettings, EAS_ADDRESS } from './chain';
@@ -15,6 +14,9 @@ export interface AttestationRequest {
 }
 
 /** Submits a batch and returns the resulting UIDs, in request order. */
+/** Injection token for a configured submitter. Only the attester resolves one. */
+export const ATTESTATION_SUBMITTER = Symbol('ATTESTATION_SUBMITTER');
+
 export interface AttestationSubmitter {
   submit(requests: readonly AttestationRequest[]): Promise<string[]>;
 }
@@ -26,6 +28,11 @@ export interface AttestOptions {
   readonly limit?: number;
   /** Attest only documents that have been embedded. On by default. */
   readonly embeddedOnly?: boolean;
+  /**
+   * Attest only documents in this index. The attester passes the index it is
+   * draining, so one customer's pages are not held up behind another's.
+   */
+  readonly indexId?: string;
 }
 
 export interface AttestSummary {
@@ -51,14 +58,21 @@ export async function attestPending(
 
   const batchSize = options.batchSize ?? 50;
   const documents = dataSource.getRepository(DocumentEntity);
-  const pending = await documents.find({
-    where: {
-      attestationUid: IsNull(),
-      ...(options.embeddedOnly === false ? {} : { embeddedAt: Not(IsNull()) }),
-    },
-    order: { updatedAt: 'ASC' },
-    ...(options.limit === undefined ? {} : { take: options.limit }),
-  });
+  const query = documents
+    .createQueryBuilder('document')
+    .where('document.attestationUid IS NULL')
+    .orderBy('document.updatedAt', 'ASC');
+  if (options.embeddedOnly !== false) query.andWhere('document.embeddedAt IS NOT NULL');
+  if (options.indexId !== undefined) {
+    query.innerJoin(
+      'index_documents',
+      'membership',
+      'membership.document_id = document.id AND membership.index_id = :indexId',
+      { indexId: options.indexId },
+    );
+  }
+  if (options.limit !== undefined) query.take(options.limit);
+  const pending = await query.getMany();
 
   let attested = 0;
   let batches = 0;

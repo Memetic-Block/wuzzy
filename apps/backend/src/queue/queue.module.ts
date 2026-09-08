@@ -1,5 +1,6 @@
 import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
+import { ATTEST_QUEUE } from './attest.queue';
 import { CRAWL_QUEUE } from './crawl.queue';
 
 /**
@@ -16,6 +17,17 @@ import { CRAWL_QUEUE } from './crawl.queue';
       connection: {
         host: process.env.REDIS_HOST ?? '127.0.0.1',
         port: Number(process.env.REDIS_PORT ?? 6379),
+      },
+    }),
+    // Producer side only. A process importing this can ask for an attestation;
+    // only the attester, which holds the key, can perform one.
+    BullModule.registerQueue({
+      name: ATTEST_QUEUE,
+      defaultJobOptions: {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 60_000 },
+        removeOnComplete: { age: 3_600, count: 100 },
+        removeOnFail: { age: 86_400 },
       },
     }),
     BullModule.registerQueue({

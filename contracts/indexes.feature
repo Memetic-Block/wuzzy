@@ -47,6 +47,12 @@ Feature: configurable indexes
     Then its pages answer a scoped search straight away
     And documents outside that index are left for their own crawl to embed
 
+  Scenario: a commissioned index is attested without a second purchase
+    Given a newly commissioned index
+    When its enqueued crawl completes
+    Then an attestation for that index is requested straight away
+    And an attester that cannot be reached delays the receipts without losing them
+
   Scenario: index status reaches ready
     Given a newly commissioned index
     When its enqueued crawls complete

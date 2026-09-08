@@ -411,14 +411,14 @@
     "accepts": [
       {
         "scheme": "exact",
-        "network": "base-sepolia",
-        "maxAmountRequired": "3920000",
-        "resource": "http://localhost:3001/indexes",
+        "network": "base",
+        "maxAmountRequired": "7840000",
+        "resource": "http://127.0.0.1:3002/indexes",
         "description": "Commission a Wuzzy index of 392 page(s)",
         "mimeType": "application/json",
-        "payTo": "0x2222222222222222222222222222222222222222",
+        "payTo": "0x1d4CF0ff49dF8105D98355c10C4ef78Ca449CF27",
         "maxTimeoutSeconds": 60,
-        "asset": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+        "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
         "outputSchema": {
           "input": {
             "type": "http",
@@ -427,7 +427,7 @@
           }
         },
         "extra": {
-          "name": "USDC",
+          "name": "USD Coin",
           "version": "2"
         }
       }

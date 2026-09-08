@@ -23,7 +23,15 @@ export interface IndexesConfig {
    * not silently raise it for indexes commissioned under the old one.
    */
   readonly indexPageCap: number | null;
-  /** Price per page for creation and appends, as a USD string. */
+  /**
+   * Price per page for creation and appends, as a USD string.
+   *
+   * It covers the attestation as well as the crawl, because every page bought
+   * here is attested onchain rather than being sold proof separately. At the
+   * gas measured in SCHEMA.md that receipt costs a bit over half a cent, so
+   * two cents leaves room for Base's fee market to move without turning each
+   * page into a loss.
+   */
   readonly pricePerPage: string;
 }
 
@@ -57,7 +65,7 @@ export function buildIndexesConfig(
     // Unbounded by default. Politeness is enforced by per-host request
     // spacing in the crawler, not by refusing to sell someone a large index.
     indexPageCap: env.WUZZY_INDEX_PAGE_CAP ? Number(env.WUZZY_INDEX_PAGE_CAP) : null,
-    pricePerPage: env.WUZZY_INDEX_PRICE_PER_PAGE ?? '$0.01',
+    pricePerPage: env.WUZZY_INDEX_PRICE_PER_PAGE ?? '$0.02',
   };
 }
 

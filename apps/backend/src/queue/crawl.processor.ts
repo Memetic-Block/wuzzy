@@ -1,11 +1,12 @@
-import { Processor, WorkerHost } from '@nestjs/bullmq';
+import { InjectQueue, Processor, WorkerHost } from '@nestjs/bullmq';
 import { Inject, Logger, Optional } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
-import type { Job } from 'bullmq';
+import { Queue, type Job } from 'bullmq';
 import { embedPending } from '../embed/embed';
 import { EMBEDDER, type Embedder } from '../embed/embedder';
 import { crawlIndexQueue } from '../indexes/index-crawl';
+import { ATTEST_QUEUE, attestJobId, type AttestJob } from './attest.queue';
 import { CRAWL_QUEUE, type CrawlJob } from './crawl.queue';
 
 /**
@@ -23,6 +24,7 @@ export class CrawlProcessor extends WorkerHost {
 
   constructor(
     @InjectDataSource() private readonly dataSource: DataSource,
+    @InjectQueue(ATTEST_QUEUE) private readonly attestQueue: Queue<AttestJob>,
     @Inject(EMBEDDER) @Optional() private readonly embedder?: Embedder,
   ) {
     super();
@@ -51,5 +53,20 @@ export class CrawlProcessor extends WorkerHost {
     this.logger.log(
       `index ${indexId}: embedded ${embedded.documents} document(s), ${embedded.chunks} chunk(s)`,
     );
+
+    // The page price covers the receipt, so asking for one is not optional and
+    // not a separate purchase. It is a different queue because it is the one
+    // step that spends gas: the attester holds the key, this process does not.
+    //
+    // Never fatal. The crawl was paid for and is done; what is owed is still
+    // derivable from the documents, and the attest sweeper asks again.
+    try {
+      await this.attestQueue.add(ATTEST_QUEUE, { indexId }, { jobId: attestJobId(indexId) });
+    } catch (error) {
+      this.logger.error(
+        `could not enqueue attestation for ${indexId}: ` +
+          `${error instanceof Error ? error.message : error}`,
+      );
+    }
   }
 }

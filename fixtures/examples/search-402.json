@@ -19,14 +19,14 @@
     "accepts": [
       {
         "scheme": "exact",
-        "network": "base-sepolia",
+        "network": "base",
         "maxAmountRequired": "10000",
-        "resource": "http://localhost:3001/search",
+        "resource": "http://127.0.0.1:3002/search",
         "description": "One Wuzzy search query with onchain provenance",
         "mimeType": "application/json",
-        "payTo": "0x2222222222222222222222222222222222222222",
+        "payTo": "0x1d4CF0ff49dF8105D98355c10C4ef78Ca449CF27",
         "maxTimeoutSeconds": 60,
-        "asset": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+        "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
         "outputSchema": {
           "input": {
             "type": "http",
@@ -35,7 +35,7 @@
           }
         },
         "extra": {
-          "name": "USDC",
+          "name": "USD Coin",
           "version": "2"
         }
       }

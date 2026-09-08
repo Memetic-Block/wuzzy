@@ -374,7 +374,7 @@ behavior:
 | `SEARCH_MODE` | `hybrid` | Default arm mix. `lexical` needs no embedding provider |
 | `SEARCH_CANDIDATES` | `200` | Retrieval window per arm; drives `total` and `exhaustive` |
 | `WUZZY_INDEX_PAGE_CAP` | `1000` | Max pages one payment may commission |
-| `WUZZY_INDEX_PRICE_PER_PAGE` | `$0.01` | |
+| `WUZZY_INDEX_PRICE_PER_PAGE` | `$0.02` | Covers the crawl and the onchain attestation. |
 
 The meter is opt-out and the two open surfaces are opt-in, so forgetting to set anything
 leaves the index metered and closed rather than given away.

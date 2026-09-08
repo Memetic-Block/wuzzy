@@ -16,6 +16,8 @@ import { DocumentEntity } from '../database/document.entity';
 import { embedPending } from '../embed/embed';
 import { CrawlProcessor } from '../queue/crawl.processor';
 import type { CrawlJob } from '../queue/crawl.queue';
+import { ATTEST_QUEUE, attestJobId } from '../queue/attest.queue';
+import { AttestSweeper } from '../queue/attest.sweeper';
 import { toVectorLiteral, type Embedder } from '../embed/embedder';
 import { PAYMENT_CONFIG, type PaymentConfig } from '../payment/payment.config';
 import { PaymentService } from '../payment/payment.service';
@@ -488,7 +490,7 @@ describe('configurable indexes', () => {
     await source.getRepository(ChunkEntity).delete({ documentId: outsider.id });
     await source.getRepository(DocumentEntity).update({ id: outsider.id }, { embeddedAt: null });
 
-    const processor = new CrawlProcessor(source, stubEmbedder());
+    const processor = new CrawlProcessor(source, fakeQueue as never, stubEmbedder());
     await processor.process({ data: { indexId: commissioned.id } } as Job<CrawlJob>);
 
     const { app, url } = await boot(source);
@@ -510,6 +512,53 @@ describe('configurable indexes', () => {
     // drained the whole backlog would make one payer wait on another's pages.
     const left = await source.getRepository(DocumentEntity).findOneBy({ id: outsider.id });
     expect(left?.embeddedAt).toBeNull();
+  });
+
+  scenario('a commissioned index is attested without a second purchase', async () => {
+    const source = ready();
+    if (!source) return;
+
+    const origin = (
+      await site({
+        '/robots.txt': ROBOTS_ALLOW_ALL,
+        '/guide': page('Guide', PROSE),
+      })
+    ).origin;
+
+    const service = new IndexesService(source, indexesConfig);
+    const commissioned = await service.create({
+      owner: WALLET_A,
+      name: 'Commissioned',
+      urls: [`${origin}/guide`],
+    });
+
+    queued.length = 0;
+    await new CrawlProcessor(source, fakeQueue as never, stubEmbedder()).process({
+      data: { indexId: commissioned.id },
+    } as Job<CrawlJob>);
+
+    // The page price bought the receipt, so nothing else has to be paid for it
+    // to be asked for.
+    const asked = queued.filter((job) => job.name === ATTEST_QUEUE);
+    expect(asked).toHaveLength(1);
+    expect(asked[0]!.data.indexId).toBe(commissioned.id);
+    expect(asked[0]!.opts?.jobId).toBe(attestJobId(commissioned.id));
+
+    // An attester that cannot be reached must not fail the crawl, which has
+    // already been paid for and done.
+    const broken = {
+      add: async () => {
+        throw new Error('redis unreachable');
+      },
+    };
+    const again = new CrawlProcessor(source, broken as never, stubEmbedder());
+    await again.process({ data: { indexId: commissioned.id } } as Job<CrawlJob>);
+
+    // And the debt survives, because it is derived from the documents rather
+    // than from the queue: the sweeper still finds it.
+    const swept = await new AttestSweeper(source, fakeQueue as never).sweep();
+    expect(swept).toBeGreaterThan(0);
+    expect(queued.some((job) => job.opts?.jobId === attestJobId(commissioned.id))).toBe(true);
   });
 
   scenario('index status reaches ready', async () => {

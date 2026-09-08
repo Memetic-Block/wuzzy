@@ -53,7 +53,7 @@ function networkLabel(network: string): string {
 /** The price the meter is configured with, never a number typed into copy. */
 const queryPrice = env.X402_PRICE ?? '$0.01';
 /** The per-page crawl rate, the same variable the backend prices commissions with. */
-const pricePerPage = env.WUZZY_INDEX_PRICE_PER_PAGE ?? '$0.01';
+const pricePerPage = env.WUZZY_INDEX_PRICE_PER_PAGE ?? '$0.02';
 
 export const site = {
   name: 'Wuzzy',

@@ -202,7 +202,7 @@ describe('homepage', () => {
     // hardcoded and will go stale silently.
     const built = Bun.spawn([process.execPath, 'build.ts'], {
       cwd: appDir,
-      env: { ...process.env, WUZZY_INDEX_PRICE_PER_PAGE: '$0.02' },
+      env: { ...process.env, WUZZY_INDEX_PRICE_PER_PAGE: '$0.05' },
       stdout: 'pipe',
       stderr: 'pipe',
     });
@@ -210,7 +210,7 @@ describe('homepage', () => {
     const doubled = await read('index.html');
 
     for (const ticket of COMMISSION_TICKETS) {
-      expect(doubled).toContain(priceForPages('$0.02', ticket.pages));
+      expect(doubled).toContain(priceForPages('$0.05', ticket.pages));
       expect(doubled).not.toContain(`${priceForPages(site.pricePerPage, ticket.pages)}<`);
     }
   });
