@@ -232,7 +232,7 @@ The same fields plus live crawl progress. 404 if the reference resolves to nothi
 ```json
 {
   "id": "e3b69e4e-...", "slug": "account-abstraction", "status": "ready",
-  "pages": 250, "attestations": 0, "pending": 0,
+  "pages": 250, "attestations": 250, "pending": 0, "failed": 2, "failures": [ … ],
   "statusUrl": "/indexes/e3b69e4e-..."
 }
 ```
@@ -240,7 +240,13 @@ The same fields plus live crawl progress. 404 if the reference resolves to nothi
 `status` is **derived from the crawl queue, never stored**, so it cannot disagree with the
 work outstanding: `pending` when nothing has been crawled yet, `crawling` while some has,
 `ready` when no queued URL remains. `pages` counts membership rows, `attestations` how many of
-those carry a UID, `pending` how many paid-for URLs the store does not hold yet.
+those carry a UID, `pending` how many paid-for URLs the store does not hold yet. Queue rows are
+retired as each page lands, so `pending` falls throughout a crawl rather than all at once at the
+end.
+
+`failed` counts URLs that were paid for, fetched, and yielded nothing indexable, and `failures`
+names them with the reason, capped at 50. Without it an index that is short of what was bought
+gives the buyer no way to learn which pages are missing or why.
 
 `pageCap` on an index row is a snapshot of the configured cap when it was created, which is
 why older indexes can show a different number from the current `WUZZY_INDEX_PAGE_CAP`.

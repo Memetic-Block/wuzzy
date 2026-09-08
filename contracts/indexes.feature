@@ -53,6 +53,17 @@ Feature: configurable indexes
     Then an attestation for that index is requested straight away
     And an attester that cannot be reached delays the receipts without losing them
 
+  Scenario: status moves while the crawl is still running
+    Given a commissioned index whose crawl is part way through
+    Then the pages it already holds are reported as held
+    And the URLs still owed have gone down by the same number
+
+  Scenario: URLs paid for that yield nothing are named
+    Given a commissioned index containing a URL that cannot be indexed
+    When its enqueued crawl completes
+    Then the status report counts that URL as failed
+    And names it with the reason, so the buyer can see what they did not get
+
   Scenario: index status reaches ready
     Given a newly commissioned index
     When its enqueued crawls complete

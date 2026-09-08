@@ -31,8 +31,20 @@ export interface IndexStatusReport extends IndexSummary {
   readonly attestations: number;
   /** URLs paid for that the store does not hold yet. */
   readonly pending: number;
+  /**
+   * URLs paid for that were fetched and produced nothing indexable. Reported
+   * because the alternative is an index that is quietly short of what was
+   * bought: a customer who pays for 364 pages and gets 362 has no other way to
+   * find out which two, or why.
+   */
+  readonly failed: number;
+  /** The failures themselves, capped so a bad batch cannot return a novel. */
+  readonly failures: readonly { readonly url: string; readonly error: string }[];
   readonly statusUrl: string;
 }
+
+/** Enough to diagnose a batch without turning the status report into a dump. */
+const FAILURE_SAMPLE = 50;
 
 export interface CreateIndexRequest {
   readonly owner: string;
@@ -172,9 +184,22 @@ export class IndexesService {
          (SELECT count(*) FROM index_urls u
            WHERE u.index_id = $1 AND u.crawled_at IS NULL)::int AS pending,
          (SELECT count(*) FROM index_urls u
-           WHERE u.index_id = $1 AND u.crawled_at IS NOT NULL)::int AS crawled`,
+           WHERE u.index_id = $1 AND u.crawled_at IS NOT NULL)::int AS crawled,
+         (SELECT count(*) FROM index_urls u
+           WHERE u.index_id = $1 AND u.error IS NOT NULL)::int AS failed`,
       [index.id],
-    )) as [{ pages: number; attestations: number; pending: number; crawled: number }];
+    )) as [
+      { pages: number; attestations: number; pending: number; crawled: number; failed: number },
+    ];
+
+    const failures: { url: string; error: string }[] =
+      counts.failed === 0
+        ? []
+        : await this.dataSource.query(
+            `SELECT url, error FROM index_urls
+              WHERE index_id = $1 AND error IS NOT NULL ORDER BY id LIMIT $2`,
+            [index.id, FAILURE_SAMPLE],
+          );
 
     return {
       ...summarize(index),
@@ -182,6 +207,8 @@ export class IndexesService {
       pages: counts.pages,
       attestations: counts.attestations,
       pending: counts.pending,
+      failed: counts.failed,
+      failures,
       statusUrl: `/indexes/${index.id}`,
     };
   }

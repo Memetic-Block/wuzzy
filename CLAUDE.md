@@ -228,7 +228,11 @@ Three things follow, and breaking any of them is a bug:
   development-only switch.
 
 An index's status is derived from its crawl queue rather than stored, so it cannot disagree
-with the work outstanding. [admin/](apps/backend/src/admin/) still groups by host, which is a
+with the work outstanding. That only holds because `index_urls` rows are retired as each page
+lands rather than in one sweep when the run ends: retiring them at the end left `pending` frozen
+at its starting value for the length of a crawl and then jumping to ready, which reads as a
+stuck index and is what a dogfood run reported. The `crawling` state exists only if that
+counter moves. [admin/](apps/backend/src/admin/) still groups by host, which is a
 view over the global index rather than the only grouping available.
 
 ## Running the demo

@@ -561,6 +561,71 @@ describe('configurable indexes', () => {
     expect(queued.some((job) => job.opts?.jobId === attestJobId(commissioned.id))).toBe(true);
   });
 
+  scenario('status moves while the crawl is still running', async () => {
+    const source = ready();
+    if (!source) return;
+
+    const origin = (
+      await site({
+        '/robots.txt': ROBOTS_ALLOW_ALL,
+        '/one': page('One', PROSE),
+        '/two': page('Two', PROSE),
+      })
+    ).origin;
+
+    const service = new IndexesService(source, indexesConfig);
+    const index = await service.create({
+      owner: WALLET_A,
+      name: 'In progress',
+      urls: [`${origin}/one`, `${origin}/two`],
+    });
+
+    const before = await service.status(index);
+    expect(before.pending).toBe(2);
+
+    // Retiring the queue only at the end of a run is what made a live crawl
+    // sit at its starting `pending` for the whole crawl and then jump to
+    // ready, which reads as a stuck index rather than a working one.
+    await crawlIndexQueue(source, index.id);
+
+    const after = await service.status(index);
+    expect(after.pages).toBe(2);
+    expect(after.pending).toBe(0);
+    expect(before.pending - after.pending).toBe(after.pages);
+  });
+
+  scenario('URLs paid for that yield nothing are named', async () => {
+    const source = ready();
+    if (!source) return;
+
+    const mock = await site({
+      '/robots.txt': ROBOTS_ALLOW_ALL,
+      '/good': page('Good', PROSE),
+      // Served, but there is nothing in it to index.
+      '/thin': page('Thin', 'Too little.'),
+    });
+
+    const service = new IndexesService(source, indexesConfig);
+    const index = await service.create({
+      owner: WALLET_A,
+      name: 'Partly indexable',
+      urls: [`${mock.origin}/good`, `${mock.origin}/thin`],
+    });
+
+    await crawlIndexQueue(source, index.id);
+
+    const status = await service.status(index);
+    expect(status.pages).toBe(1);
+    expect(status.pending).toBe(0);
+
+    // Paid for two, got one. Without this the shortfall is invisible: the
+    // buyer can see the count is short and has no way to learn which URL.
+    expect(status.failed).toBe(1);
+    expect(status.failures).toHaveLength(1);
+    expect(status.failures[0]!.url).toBe(`${mock.origin}/thin`);
+    expect(status.failures[0]!.error).toBeTruthy();
+  });
+
   scenario('index status reaches ready', async () => {
     const source = ready();
     if (!source) return;

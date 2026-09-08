@@ -57,12 +57,30 @@ export async function crawlIndexQueue(
     // Paid-for URLs are fetched whatever a sitemap claims: the payer asked for
     // these pages now, and a freshness check would hand back an empty index.
     refetchAll: true,
-    onDocument: (event) => resolved.set(event.requestedUrl, event.url),
+    onDocument: (event) => {
+      resolved.set(event.requestedUrl, event.url);
+      // Retired as it lands, not in one sweep at the end. Status is derived
+      // from this column, so writing it only on completion means an index
+      // reports `pending` with nothing outstanding moving for the length of
+      // the crawl, and then jumps straight to ready. Someone watching a
+      // 90-second crawl cannot tell that from a stuck one.
+      //
+      // Not awaited: this is a progress signal on the crawler's hot path, and
+      // the sweep below is what makes the state correct regardless.
+      void dataSource
+        .query(
+          `UPDATE index_urls SET crawled_at = now(), error = NULL
+             WHERE index_id = $1 AND url = $2 AND crawled_at IS NULL`,
+          [indexId, event.requestedUrl],
+        )
+        .catch(() => undefined);
+    },
   });
 
   // Every attempted URL leaves the queue, so a page that cannot be fetched
   // does not keep the index short of ready forever. What went wrong is
-  // recorded rather than retried silently.
+  // recorded rather than retried silently. Whatever the progress writes above
+  // already retired is left alone by the `crawled_at IS NULL` guard.
   await dataSource.query(
     `UPDATE index_urls u
         SET crawled_at = now(),
