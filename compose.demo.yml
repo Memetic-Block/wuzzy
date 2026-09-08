@@ -173,7 +173,10 @@ services:
       EMBEDDING_MODEL: stub-embeddings
       EMBEDDING_DIMENSIONS: "1536"
     depends_on:
-      postgres:
+      # The backend owns the migration, and the worker's first query is against
+      # a table it creates. Waiting on postgres alone is a race that only shows
+      # itself on a fresh volume, as an undefined-table crash on boot.
+      backend:
         condition: service_healthy
       redis:
         condition: service_healthy
