@@ -46,10 +46,13 @@ job "wuzzy-frontend-static-stage" {
         X402_NETWORK    = "base"
         X402_PRICE      = "$0.01"
 
-        # Absent values render as a stated "published at cutover" note rather
-        # than a dead link, so the page is complete before these exist.
-        # X402_PAY_TO    = ""
-        # EAS_SCHEMA_URL = "https://base.easscan.org/schema/view/0x15616641fbb8e7ee6a63f4904a622a154972e47453062c845845e1f2387f9f1a"
+        # Known at cutover, so the page states them rather than the "published
+        # at cutover" placeholder it falls back to. The pay-to address is
+        # already public in every 402 the API answers, and the schema is the
+        # one registered on Base mainnet in block 51018240.
+        X402_PAY_TO    = "0x0Deb462437ab46F703fcd15F9cf9c9Ea6472EAcB"
+        EAS_SCHEMA_URL = "https://base.easscan.org/schema/view/0x15616641fbb8e7ee6a63f4904a622a154972e47453062c845845e1f2387f9f1a"
+        # Still unpublished, so this one keeps the placeholder.
         # BAZAAR_URL     = ""
       }
 
