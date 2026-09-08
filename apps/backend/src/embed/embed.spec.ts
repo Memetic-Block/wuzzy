@@ -7,7 +7,7 @@ import { buildDataSourceOptions } from '../database/typeorm.config';
 import { truncateWuzzyTables } from '../testing/database';
 import { chunk } from './chunker';
 import { embedPending } from './embed';
-import { DEFAULT_DIMENSIONS, type Embedder } from './embedder';
+import { createEmbedder, DEFAULT_DIMENSIONS, type Embedder } from './embedder';
 import { PROTOCOL } from '../canonicalize/v1';
 
 let dataSource: DataSource | undefined;
@@ -179,5 +179,68 @@ describe('embed pass', () => {
     const secondChunks = await source.getRepository(ChunkEntity).find();
     expect(secondChunks.length).toBeLessThan(firstChunks.length);
     expect(secondChunks.every((c) => c.text.length > 0)).toBe(true);
+  });
+});
+
+describe('embedding client', () => {
+  const originalFetch = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  const vectors = (count: number, dimensions: number) =>
+    new Response(
+      JSON.stringify({
+        data: Array.from({ length: count }, (_, index) => ({
+          index,
+          embedding: Array.from({ length: dimensions }, () => 0.1),
+        })),
+      }),
+      { status: 200 },
+    );
+
+  const replies = (...responses: Response[]) => {
+    let call = 0;
+    globalThis.fetch = (async () =>
+      responses[Math.min(call++, responses.length - 1)]!) as unknown as typeof fetch;
+    return () => call;
+  };
+
+  it('retries a rate limit rather than failing the crawl that owns it', async () => {
+    const calls = replies(new Response('slow down', { status: 429 }), vectors(1, 4));
+    const waits: number[] = [];
+
+    const embedder = createEmbedder({ dimensions: 4, sleep: async (ms) => void waits.push(ms) }, {});
+    expect(await embedder.embed(['hello'])).toHaveLength(1);
+    expect(calls()).toBe(2);
+    expect(waits).toEqual([500]);
+  });
+
+  it('waits as long as Retry-After asks, because the provider knows when its quota resets', async () => {
+    replies(
+      new Response('slow down', { status: 429, headers: { 'retry-after': '2' } }),
+      vectors(1, 4),
+    );
+    const waits: number[] = [];
+
+    const embedder = createEmbedder({ dimensions: 4, sleep: async (ms) => void waits.push(ms) }, {});
+    await embedder.embed(['hello']);
+    expect(waits).toEqual([2000]);
+  });
+
+  it('gives up once the budget is spent and reports the status', async () => {
+    const calls = replies(new Response('nope', { status: 429 }));
+
+    const embedder = createEmbedder({ dimensions: 4, maxRetries: 2, sleep: async () => {} }, {});
+    await expect(embedder.embed(['hello'])).rejects.toThrow(/429/);
+    expect(calls()).toBe(3); // the first attempt, then two retries
+  });
+
+  it('does not retry a rejected key, which no amount of waiting fixes', async () => {
+    const calls = replies(new Response('bad key', { status: 401 }));
+
+    const embedder = createEmbedder({ dimensions: 4, sleep: async () => {} }, {});
+    await expect(embedder.embed(['hello'])).rejects.toThrow(/401/);
+    expect(calls()).toBe(1);
   });
 });
