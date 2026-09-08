@@ -300,10 +300,18 @@ bun run migration:show
 `migration:generate` diffs entities against the live schema, so have Postgres up first. It
 cannot see the extension or the hnsw index; those go in by hand.
 
-**Applying migrations on deploy.** Either run `bun run migration:run` as a one-off job before
-rolling out the new version (preferred for multi-replica), or set `DB_MIGRATIONS_RUN=true` and
-let the app migrate during startup (simple, single-instance). The container image includes
-`typeorm` and the migration files, so both work inside it.
+**Applying migrations on deploy.** Run
+[operations/wuzzy-migrate.hcl](operations/wuzzy-migrate.hcl), a batch job that applies what is
+pending and exits, before rolling out the new version. It is idempotent, so re-running it on an
+up-to-date database does nothing and succeeds. `DB_MIGRATIONS_RUN=true` migrates during startup
+instead, which is fine for a single instance and wrong for several: every replica would race to
+apply the same migration.
+
+The commands above are for a developer machine. Inside the image, `bun run migration:run` does
+not work: bun's workspace install hoists packages to the repository root there, so the
+`apps/backend/node_modules` that script's relative path expects does not exist and it fails
+with a module-not-found that reads nothing like a migration error. The job spec invokes the CLI
+at the path it actually has.
 
 ## Container images
 
