@@ -40,6 +40,16 @@ job "wuzzy-api-live" {
       }
 
       env {
+        # Gemini through its OpenAI-compatible layer, which is the shape the
+        # client in apps/backend/src/embed/embedder.ts already speaks. The size
+        # is not free choice: it must match the `vector(1536)` column and its
+        # hnsw index. gemini-embedding-001 returns 3072 by default and truncates
+        # to 1536 on request, and pgvector cannot build an hnsw index above 2000
+        # dimensions, so the default would be unindexable as well as wrong.
+        EMBEDDING_BASE_URL   = "https://generativelanguage.googleapis.com/v1beta/openai"
+        EMBEDDING_MODEL      = "gemini-embedding-001"
+        EMBEDDING_DIMENSIONS = "1536"
+
         PORT          = "3000"
         POSTGRES_DB   = "wuzzy"
         POSTGRES_USER = "wuzzy"

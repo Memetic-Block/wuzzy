@@ -151,6 +151,15 @@ support. That is why the image tag is written into each file and set with
 later, moving back to variables is worth doing: a literal tag in thirteen places is only safe
 while one command maintains all of them.
 
+**The embedding provider is Gemini, and 1536 is not a free choice.** The API, worker and
+pipeline call `gemini-embedding-001` through Google's OpenAI-compatible layer, which is the
+shape [embedder.ts](../apps/backend/src/embed/embedder.ts) already speaks, so switching provider
+was configuration rather than code. The size is constrained from two directions: the `chunks`
+column is `vector(1536)`, and pgvector cannot build an hnsw index above **2000** dimensions. The
+model returns 3072 by default and truncates on request, so leaving `EMBEDDING_DIMENSIONS` unset
+would produce vectors that are both wrong for the column and too wide to index. Any future
+provider has to hit 1536 or bring a migration of the column and its index with it.
+
 Before a first deploy someone has to create:
 
 - **A Nomad host volume `wuzzy-db`** on the `store` node, for the database.
