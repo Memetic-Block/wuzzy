@@ -4,8 +4,9 @@ A full end-to-end run of the paid loop against a forked Base mainnet: a real 402
 EIP-3009 signature, a real USDC settlement and real attestations written against the schema
 that is actually registered on Base. Nothing costs anything and nothing reaches mainnet.
 
-The point is not to demonstrate that our own code works. It is to hand the running system to
-someone who has never seen it and find out whether they can pay us and check what they bought.
+The point is not to demonstrate that our own code works. It is to use the thing ourselves, as a
+customer would: pay for an index we actually want, then rely on it. What we learn is whether it
+is worth paying for, which is a different question from whether it passes its tests.
 
 ## Why a fork rather than the demo stack
 
@@ -119,11 +120,14 @@ to handle the difference.
 For the demo video specifically, follow [RECORDING.md](RECORDING.md): it has the shot list
 and measured timings for each step.
 
-## Handing it to a client
+## Handing it over
 
 Give them [BRIEFING.md](BRIEFING.md) and the wallet from step 3. Nothing else: no repository,
-no schema UID, no explanation of the payment scheme. If they need something that is not
-reachable from those two URLs, that is the finding.
+no schema UID, no explanation of the payment scheme. Someone who already knows how it works
+cannot tell us whether it explains itself.
+
+Resist the urge to help while it is running. An answer given over their shoulder is an answer
+the docs did not have to contain, and the gap closes without anyone writing it down.
 
 ## What a fork cannot tell you
 

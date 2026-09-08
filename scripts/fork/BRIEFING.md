@@ -1,10 +1,12 @@
-# Wuzzy: brief for an agent under test
+# Wuzzy: brief for an agent that wants a corpus searchable
 
-You are evaluating a search API you have never seen. You do not have its source and you do not
-need it. Everything below is what a real integrator would have.
+You need to answer questions about the Base ecosystem's documentation, accurately, with
+sources you can point at. You do not have that today.
 
-If you need something that is not reachable from these URLs, stop and write down what was
-missing. That is the finding we want, and it is worth more to us than a success.
+Wuzzy is a service that will crawl pages you name, index them, and answer queries about them.
+It charges per page to build an index and per query to search it, and it pays out to a wallet
+rather than an account, so there is nothing to sign up for. You have a funded wallet. Go and
+get yourself a good Base docs index, then use it.
 
 ## What you have
 
@@ -14,38 +16,41 @@ missing. That is the finding we want, and it is worth more to us than a success.
 
     WALLET_PRIVATE_KEY   <supplied separately>
 
-The wallet holds USDC and ETH. This is a private fork of Base: the funds are not real and
-nothing you sign leaves this machine.
+This runs against a private fork of Base. The funds are real USDC and ETH as far as every
+signature and balance check is concerned, but they exist only on this machine, and nothing you
+sign leaves it. Spend as though it counted: the point is to find out what this costs and
+whether it is worth it.
 
-## The situation
+## What you are trying to end up with
 
-Nothing is indexed yet. There is a catalog, and it is empty.
+Something you would actually use. Concretely:
 
-You want to be able to answer questions about the Base ecosystem's documentation, which lives
-at `https://docs.base.org` and publishes a sitemap. Get from here to there.
+- The Base ecosystem's docs indexed well enough that a question you did not plan for gets a
+  useful answer. `https://docs.base.org` publishes a sitemap and is the obvious starting
+  point. Whether that one site is enough to call the job done is your call, not ours.
+- A clear idea of what it cost you to build, and what each query costs.
+- Confidence that an answer is not invented. Every result carries a claim about when a page
+  was fetched and what it contained. Satisfy yourself that those claims hold, using the RPC
+  above rather than the API's own word for it. You are about to rely on this thing.
 
-## What we want to know
+How you get there is up to you. Nothing here is a test with a right answer.
 
-1. **How do you find out what anything costs?** The price is not in this document on purpose.
-2. **Can you get an index built without asking a human for anything?** No account, no API key,
-   no support ticket.
-3. **Can you tell whether a result is real?** Every result claims something about when a page
-   was fetched and what it contained. Check one of those claims against the chain, without
-   trusting the API's own answer for it.
-4. **What happens at the edges?** Try paying too little, paying twice with the same
-   authorization, commissioning more pages than are allowed, and searching an index you do not
-   own. Report what you get back and whether it told you enough to recover.
+## How to work
 
-## Rules
+You have exactly what a customer would have: two URLs and a wallet. Use the docs. If you write
+your own client, say so; if you find one, say where.
 
-- Use only the URLs above. Do not read the server's source even if you can find it.
-- Say whether you wrote your own client or used one you found, and where you found it.
-- If the documentation is wrong or incomplete, say so and say how you got past it. A workaround
-  you had to invent is a documentation bug.
+Tell us afterwards what it was like to use, in whatever detail you think is warranted. Not a
+report card: the things worth hearing are where you had to guess, where the docs did not say
+what you needed, where a price or a limit surprised you, and whether you would spend your own
+money on it again. If something stopped you outright, say what you tried.
 
-## Known local quirks, so you do not chase them
+## Local quirks, so you do not chase them
 
 - Links to `basescan.org` and `base.easscan.org` in responses will not resolve. Those explorers
-  only know the public chain and this is a private fork. Everything they point at is real and
-  present on the RPC above; check it there.
-- Search is running lexical-only. Ranking quality is not under test.
+  only know the public chain, and this is a private fork. What they point at is real and
+  present on the RPC above, so check it there.
+- Search is running lexical-only, so ranking is keyword-driven rather than semantic. Judge the
+  index on coverage rather than on how clever the ordering is.
+- Results may say a page is not yet attested onchain. That is a real state of the product, not
+  a fault: attesting is a separate step that costs gas, and it runs behind indexing.
