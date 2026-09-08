@@ -2,7 +2,7 @@ import { Inject, Injectable, Optional } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { PROTOCOL, PROTOCOL_VERSION } from '../canonicalize/v1';
-import { createEmbedder, toVectorLiteral, type Embedder } from '../embed/embedder';
+import { createEmbedder, EMBEDDER, toVectorLiteral, type Embedder } from '../embed/embedder';
 import { attestationUrl } from '../verify/verify';
 import { reciprocalRankFusion } from './fusion';
 import { lexicalSearch, type LexicalHit, type Scope } from './lexical';
@@ -54,8 +54,6 @@ export interface SearchPage {
   readonly exhaustive: boolean;
   readonly hasMore: boolean;
 }
-
-export const EMBEDDER = Symbol('EMBEDDER');
 
 interface VectorHit {
   chunk_id: string;

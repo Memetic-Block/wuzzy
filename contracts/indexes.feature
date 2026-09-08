@@ -41,6 +41,12 @@ Feature: configurable indexes
     And the same is true when the owner appends to it
     And a queue that cannot be reached does not lose the work, only delays it
 
+  Scenario: a crawled index is searchable without waiting for a batch pass
+    Given a newly commissioned index
+    When its enqueued crawl completes
+    Then its pages answer a scoped search straight away
+    And documents outside that index are left for their own crawl to embed
+
   Scenario: index status reaches ready
     Given a newly commissioned index
     When its enqueued crawls complete

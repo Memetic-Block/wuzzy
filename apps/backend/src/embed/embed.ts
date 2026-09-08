@@ -1,4 +1,3 @@
-import { IsNull } from 'typeorm';
 import type { DataSource } from 'typeorm';
 import { ChunkEntity } from '../database/chunk.entity';
 import { DocumentEntity } from '../database/document.entity';
@@ -11,6 +10,12 @@ export interface EmbedOptions {
   readonly limit?: number;
   /** Texts per embedding request. */
   readonly batchSize?: number;
+  /**
+   * Embed only the documents in this index. The crawl worker passes the index
+   * it has just filled, so an index someone paid for is searchable when its
+   * crawl finishes rather than after the next pass over the whole corpus.
+   */
+  readonly indexId?: string;
 }
 
 export interface EmbedSummary {
@@ -34,11 +39,21 @@ export async function embedPending(
   const embedder = options.embedder ?? createEmbedder();
   const batchSize = options.batchSize ?? 64;
 
-  const pending = await dataSource.getRepository(DocumentEntity).find({
-    where: { embeddedAt: IsNull() },
-    order: { updatedAt: 'ASC' },
-    ...(options.limit === undefined ? {} : { take: options.limit }),
-  });
+  const query = dataSource
+    .getRepository(DocumentEntity)
+    .createQueryBuilder('document')
+    .where('document.embeddedAt IS NULL')
+    .orderBy('document.updatedAt', 'ASC');
+  if (options.indexId !== undefined) {
+    query.innerJoin(
+      'index_documents',
+      'membership',
+      'membership.document_id = document.id AND membership.index_id = :indexId',
+      { indexId: options.indexId },
+    );
+  }
+  if (options.limit !== undefined) query.take(options.limit);
+  const pending = await query.getMany();
 
   let chunksWritten = 0;
   for (const document of pending) {

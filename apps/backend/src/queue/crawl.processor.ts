@@ -1,8 +1,10 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { Logger } from '@nestjs/common';
+import { Inject, Logger, Optional } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import type { Job } from 'bullmq';
+import { embedPending } from '../embed/embed';
+import { EMBEDDER, type Embedder } from '../embed/embedder';
 import { crawlIndexQueue } from '../indexes/index-crawl';
 import { CRAWL_QUEUE, type CrawlJob } from './crawl.queue';
 
@@ -19,7 +21,10 @@ import { CRAWL_QUEUE, type CrawlJob } from './crawl.queue';
 export class CrawlProcessor extends WorkerHost {
   private readonly logger = new Logger(CrawlProcessor.name);
 
-  constructor(@InjectDataSource() private readonly dataSource: DataSource) {
+  constructor(
+    @InjectDataSource() private readonly dataSource: DataSource,
+    @Inject(EMBEDDER) @Optional() private readonly embedder?: Embedder,
+  ) {
     super();
   }
 
@@ -32,6 +37,19 @@ export class CrawlProcessor extends WorkerHost {
     this.logger.log(
       `index ${indexId}: requested ${result.requested}, indexed ${result.indexed}, ` +
         `skipped ${result.skipped}, failed ${result.failed}`,
+    );
+
+    // Crawled is not the same as searchable: retrieval reads chunks, and
+    // nothing writes them until a document is embedded. Leaving that to the
+    // nightly pass would mean an index someone paid for reports itself ready
+    // and then answers nothing until 03:00, which is the same latency the
+    // queue exists to remove from the crawl.
+    const embedded = await embedPending(this.dataSource, {
+      indexId,
+      ...(this.embedder ? { embedder: this.embedder } : {}),
+    });
+    this.logger.log(
+      `index ${indexId}: embedded ${embedded.documents} document(s), ${embedded.chunks} chunk(s)`,
     );
   }
 }

@@ -21,6 +21,13 @@ export interface OpenAiEmbedderOptions {
   readonly dimensions?: number;
 }
 
+/**
+ * Injection token for a configured Embedder. Both the search service and the
+ * crawl worker resolve one, so it lives beside the interface rather than in
+ * whichever consumer happened to need it first.
+ */
+export const EMBEDDER = Symbol('EMBEDDER');
+
 export function createEmbedder(
   options: OpenAiEmbedderOptions = {},
   env: Record<string, string | undefined> = process.env,

@@ -5,6 +5,7 @@ import { LogLevel, log as crawleeLog } from '@crawlee/basic';
 import { Test } from '@nestjs/testing';
 import { getDataSourceToken } from '@nestjs/typeorm';
 import { getQueueToken } from '@nestjs/bullmq';
+import type { Job } from 'bullmq';
 import type { INestApplication } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { exact } from 'x402/schemes';
@@ -13,6 +14,8 @@ import { page, PROSE, startMockSite, type MockSite } from '../crawl/mock-site';
 import { ChunkEntity } from '../database/chunk.entity';
 import { DocumentEntity } from '../database/document.entity';
 import { embedPending } from '../embed/embed';
+import { CrawlProcessor } from '../queue/crawl.processor';
+import type { CrawlJob } from '../queue/crawl.queue';
 import { toVectorLiteral, type Embedder } from '../embed/embedder';
 import { PAYMENT_CONFIG, type PaymentConfig } from '../payment/payment.config';
 import { PaymentService } from '../payment/payment.service';
@@ -456,6 +459,57 @@ describe('configurable indexes', () => {
     } finally {
       await app.close();
     }
+  });
+
+  scenario('a crawled index is searchable without waiting for a batch pass', async () => {
+    const source = ready();
+    if (!source) return;
+
+    const origin = (
+      await site({
+        '/robots.txt': ROBOTS_ALLOW_ALL,
+        '/paymaster': page('Paymaster', `A paymaster sponsors gas for users on Base. ${PROSE}`),
+      })
+    ).origin;
+
+    const service = new IndexesService(source, indexesConfig);
+    const commissioned = await service.create({
+      owner: WALLET_A,
+      name: 'Commissioned',
+      urls: [`${origin}/paymaster`],
+    });
+
+    // A page another index is still owed, put back to what a crawl leaves
+    // behind: content stored, nothing chunked.
+    const other = await makeIndex(source, { name: 'Someone else' });
+    const outsider = await seedDocument(source, 'https://docs.test/outsider', 'paymaster on Base', {
+      indexId: other.id,
+    });
+    await source.getRepository(ChunkEntity).delete({ documentId: outsider.id });
+    await source.getRepository(DocumentEntity).update({ id: outsider.id }, { embeddedAt: null });
+
+    const processor = new CrawlProcessor(source, stubEmbedder());
+    await processor.process({ data: { indexId: commissioned.id } } as Job<CrawlJob>);
+
+    const { app, url } = await boot(source);
+    try {
+      const response = await send(
+        url,
+        '/search',
+        { query: 'paymaster', index: commissioned.id },
+        WALLET_A,
+      );
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as { results: { url: string }[] };
+      expect(body.results.map((result) => result.url)).toEqual([`${origin}/paymaster`]);
+    } finally {
+      await app.close();
+    }
+
+    // The pass embedded what the job was for and nothing else: a worker that
+    // drained the whole backlog would make one payer wait on another's pages.
+    const left = await source.getRepository(DocumentEntity).findOneBy({ id: outsider.id });
+    expect(left?.embeddedAt).toBeNull();
   });
 
   scenario('index status reaches ready', async () => {
