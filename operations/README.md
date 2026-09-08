@@ -7,6 +7,7 @@ machine that can reach the `mb-hel` cluster; see [MANUAL-DEPLOY.md](MANUAL-DEPLO
 | --- | --- | --- | --- |
 | [wuzzy-db.hcl](wuzzy-db.hcl) | service | `meta.env=store` | Postgres + pgvector. The only stateful thing. |
 | [wuzzy-migrate.hcl](wuzzy-migrate.hcl) | batch | `meta.env=store` | Applies pending migrations and exits. Run before the API. |
+| [stamp-sha.sh](stamp-sha.sh) | script | run locally | Sets the deployed image tag across every spec at once. |
 | [wuzzy-api-live.hcl](wuzzy-api-live.hcl) | service | `meta.env=store` | The public API at `api.wuzzy.io`. |
 | [wuzzy-api-stage.hcl](wuzzy-api-stage.hcl) | service | `meta.env=store` | The same, at `api-stage.wuzzy.io`. |
 | [wuzzy-frontend-static-live.hcl](wuzzy-frontend-static-live.hcl) | batch | `meta.env=edge-worker` | Builds the site and pushes it to Cloudflare Pages. |
@@ -143,6 +144,12 @@ a name that does not resolve, which is why it is not the default.
 
 None of this has been submitted to a cluster. These specs are written against the conventions
 in `infra/` and `wuzzy-site/operations/`, but they are unvalidated until a real deploy runs.
+
+They are also plain HCL rather than HCL2, because the cluster's Nomad predates variable
+support. That is why the image tag is written into each file and set with
+[stamp-sha.sh](stamp-sha.sh) rather than passed as `-var` at submit time. If Nomad is upgraded
+later, moving back to variables is worth doing: a literal tag in thirteen places is only safe
+while one command maintains all of them.
 
 Before a first deploy someone has to create:
 

@@ -1,18 +1,7 @@
-variable "commit_sha" {
-  type        = string
-  description = "Git sha whose migrations to apply. Also selects the image tag."
-  # Defaulted so the job can be submitted from the Nomad UI with nothing to
-  # fill in, which is how this one usually gets run. `latest` is only published
-  # for default-branch builds, so pin the sha for anything other than deploying
-  # the current tip of master: the schema this applies is the schema of the
-  # image, not of whatever is already running.
-  default = "latest"
-}
-
-locals {
-  # CI publishes `sha-<full sha>` and `latest`, never a bare sha.
-  image_tag = var.commit_sha == "latest" ? "latest" : "sha-${var.commit_sha}"
-}
+# The deployed version is written into this file rather than passed in: the
+# cluster's Nomad does not support HCL2 variables. `operations/stamp-sha.sh`
+# rewrites it across every spec at once, which is safer than editing them one
+# at a time and ending up with a half-upgraded deployment.
 
 # Applies pending database migrations, then exits.
 #
@@ -61,7 +50,7 @@ job "wuzzy-migrate" {
       driver = "docker"
 
       config {
-        image = "ghcr.io/memetic-block/wuzzy-backend:${local.image_tag}"
+        image = "ghcr.io/memetic-block/wuzzy-backend:sha-634ca1a428f849e7dcaa306b41f561291f3062a0"
 
         # Not `bun run migration:run`. Bun's workspace install hoists packages
         # to the repository root in the image, so the `apps/backend/node_modules`

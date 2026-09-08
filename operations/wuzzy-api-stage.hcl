@@ -1,13 +1,7 @@
-variable "commit_sha" {
-  type        = string
-  description = "Git sha being deployed. Also selects the container image tag."
-}
-
-variable "release_tag" {
-  type        = string
-  description = "Release identifier. Live requires one; no v prefix."
-  default     = "stage"
-}
+# The deployed version is written into this file rather than passed in: the
+# cluster's Nomad does not support HCL2 variables. `operations/stamp-sha.sh`
+# rewrites it across every spec at once, which is safer than editing them one
+# at a time and ending up with a half-upgraded deployment.
 
 # The staging API at api-stage.wuzzy.io. Serves the metered /search, the free
 # rate-limited /web-search, and the indexes routes.
@@ -41,7 +35,7 @@ job "wuzzy-api-stage" {
       driver = "docker"
 
       config {
-        image = "ghcr.io/memetic-block/wuzzy-backend:sha-${var.commit_sha}"
+        image = "ghcr.io/memetic-block/wuzzy-backend:sha-634ca1a428f849e7dcaa306b41f561291f3062a0"
         ports = ["http"]
       }
 

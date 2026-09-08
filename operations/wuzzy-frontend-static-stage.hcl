@@ -1,18 +1,7 @@
-variable "commit_sha" {
-  type        = string
-  description = "Git sha being deployed. Also selects the container image tag."
-}
-
-variable "commit_timestamp" {
-  type        = string
-  description = "Commit time, ISO 8601 UTC."
-}
-
-variable "release_tag" {
-  type        = string
-  description = "Release identifier. Live requires one; no v prefix."
-  default     = "stage"
-}
+# The deployed version is written into this file rather than passed in: the
+# cluster's Nomad does not support HCL2 variables. `operations/stamp-sha.sh`
+# rewrites it across every spec at once, which is safer than editing them one
+# at a time and ending up with a half-upgraded deployment.
 
 # The public site. Static HTML rendered at deploy time and pushed to Cloudflare
 # Pages, so nothing of ours serves wuzzy.io.
@@ -41,13 +30,13 @@ job "wuzzy-frontend-static-stage" {
       driver = "docker"
 
       config {
-        image = "ghcr.io/memetic-block/wuzzy-frontend-deploy:sha-${var.commit_sha}"
+        image = "ghcr.io/memetic-block/wuzzy-frontend-deploy:sha-634ca1a428f849e7dcaa306b41f561291f3062a0"
       }
 
       env {
         PROJECT_NAME  = "wuzzy-site-stage"
         PAGES_BRANCH  = "stage"
-        COMMIT_SHA    = "${var.commit_sha}"
+        COMMIT_SHA    = "634ca1a428f849e7dcaa306b41f561291f3062a0"
 
         # Read by apps/frontend/src/site.config.ts while the pages render.
         SITE_ORIGIN     = "https://stage.wuzzy.io"

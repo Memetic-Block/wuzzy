@@ -15,22 +15,28 @@ the cluster, the same arrangement as `wuzzy-site`.
       docker manifest inspect ghcr.io/memetic-block/wuzzy-backend:sha-<sha>
 
   CI publishes `sha-<full sha>` and, for master, `latest`. It never publishes a bare sha, so
-  the job specs add the `sha-` prefix themselves and every `-var="commit_sha=..."` takes a
-  plain git sha.
+  the job specs add the `sha-` prefix themselves, so `stamp-sha.sh` takes a plain git sha.
 
   CI only publishes on a successful run, so a commit whose workflow failed has no image and
   cannot be deployed.
 
-## Job variables
+## Stamping the version
 
-Build metadata is passed with `-var` at submit time; nothing is templated into the files, so
-the specs stay clean in git. Omitting a required variable fails at parse time with
-`Unset variable "<name>"`, before anything reaches the cluster.
+**The cluster's Nomad does not support HCL2 variables**, so there is no `-var` at submit time
+and the specs carry the image tag literally. Set it across all of them at once:
 
-    SHA=$(git rev-parse origin/master)
-    TS=$(date -u -d "$(git show -s --format=%cI "$SHA")" +"%Y-%m-%dT%H:%M:%SZ")
+    ./operations/stamp-sha.sh                      # tip of origin/master
+    ./operations/stamp-sha.sh <full-40-char-sha>   # a specific build
 
-`commit_sha` does double duty: it selects the image tag and is reported by the deployed build.
+It rewrites thirteen sites in ten files, which is the reason it exists: stamping them by hand
+is how half a deployment ends up on one build and half on another. The sha appears twice per
+frontend spec, because it selects the image and is also reported by the rendered page.
+
+Commit the result. The specs are then a record of what is deployed, and a deploy is a diff
+someone can read rather than a flag someone remembered to pass.
+
+Submitting from the Nomad UI works the same way: stamp, then paste the file in. That is the
+usual path for a manual deploy here.
 
 ## Order matters on a first deploy
 
@@ -50,28 +56,24 @@ it needs to be. See [README.md](README.md) for what that defers.
     #    `synchronize` is false everywhere, so this is deliberate every time.
     #    A batch job that applies what is pending and exits; idempotent, so
     #    re-running it on an up-to-date database does nothing and succeeds.
-    nomad job run -var="commit_sha=${SHA}" operations/wuzzy-migrate.hcl
+    nomad job run operations/wuzzy-migrate.hcl
 
     # 4. API.
-    nomad job run -var="commit_sha=${SHA}" -var="release_tag=0.1.0" \
-      operations/wuzzy-api-live.hcl
+    nomad job run operations/wuzzy-api-live.hcl
 
     # 5. Crawl workers. The API only enqueues; without these a paid commission
     #    is recorded, charged and never fetched.
-    nomad job run -var="commit_sha=${SHA}" operations/wuzzy-worker.hcl
+    nomad job run operations/wuzzy-worker.hcl
 
     # 6. The attester. FUND IT FIRST: it starts writing receipts, including for
     #    the global index, as soon as it can reach the database.
-    nomad job run -var="commit_sha=${SHA}" operations/wuzzy-attester.hcl
+    nomad job run operations/wuzzy-attester.hcl
 
     # 7. Site.
-    nomad job run -var="commit_sha=${SHA}" -var="commit_timestamp=${TS}" \
-      -var="release_tag=0.1.0" operations/wuzzy-frontend-static-live.hcl
+    nomad job run operations/wuzzy-frontend-static-live.hcl
 
 Step 3 used to be a chicken-and-egg, run by deploying the API first, letting its health check
-fail and exec-ing into the allocation. `wuzzy-migrate.hcl` replaces that, and it is also the
-one job here that can be submitted from the Nomad UI with nothing filled in: its `commit_sha`
-defaults to `latest`. Pin the sha for anything other than deploying the tip of master.
+fail and exec-ing into the allocation. `wuzzy-migrate.hcl` replaces that.
 
 Do not reach for `bun run migration:run` inside a container. Bun's workspace install hoists
 packages to the repository root in the image, so the `apps/backend/node_modules` that script
@@ -89,10 +91,7 @@ size instead.
 
 ## Deploying the site
 
-Stage takes no `release_tag`; it defaults.
-
-    nomad job run -var="commit_sha=${SHA}" -var="commit_timestamp=${TS}" \
-      operations/wuzzy-frontend-static-stage.hcl
+    nomad job run operations/wuzzy-frontend-static-stage.hcl
 
 Both are `type = "batch"` with no restart or reschedule, so the job runs once and either
 completes or fails.
@@ -172,7 +171,7 @@ the attester above first: with no key the job fails immediately with `ATTESTER_P
 not set`, and with no UID it fails with `EAS_SCHEMA_UID is not set`. Both are cheap failures,
 which is the intended behaviour: it refuses rather than attesting against a wrong schema.
 
-    nomad job run -var="commit_sha=${SHA}" operations/wuzzy-attest.hcl
+    nomad job run operations/wuzzy-attest.hcl
     nomad alloc logs -f <alloc-id>
 
 Expect a line like `attested N document(s) in M batch(es)`. It is idempotent and resumable:

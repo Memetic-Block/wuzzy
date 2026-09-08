@@ -1,7 +1,7 @@
-variable "commit_sha" {
-  type        = string
-  description = "Git sha being deployed. Also selects the container image tag."
-}
+# The deployed version is written into this file rather than passed in: the
+# cluster's Nomad does not support HCL2 variables. `operations/stamp-sha.sh`
+# rewrites it across every spec at once, which is safer than editing them one
+# at a time and ending up with a half-upgraded deployment.
 
 # Writes attestations to Base mainnet. RUN BY A HUMAN, ON PURPOSE.
 #
@@ -51,7 +51,7 @@ job "wuzzy-attest" {
       driver = "docker"
 
       config {
-        image      = "ghcr.io/memetic-block/wuzzy-backend:sha-${var.commit_sha}"
+        image      = "ghcr.io/memetic-block/wuzzy-backend:sha-634ca1a428f849e7dcaa306b41f561291f3062a0"
         entrypoint = ["/bin/sh", "-c"]
         args       = ["bun apps/backend/src/cli/wuzzy.ts attest"]
       }
