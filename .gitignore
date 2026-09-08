@@ -3,3 +3,6 @@ dist/
 .env
 *.log
 .claude
+
+# Run-local fork rehearsal values: a new wallet and pay-to address each setup run.
+scripts/fork/local/
