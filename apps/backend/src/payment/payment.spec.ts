@@ -16,7 +16,7 @@ import { INDEXES_CONFIG, buildIndexesConfig } from '../indexes/index.config';
 import { globalIndexId, joinIndex, truncateWuzzyTables } from '../testing/database';
 import { scenario } from '../testing/scenario';
 import { buildPaymentConfig, PAYMENT_CONFIG, type PaymentConfig } from './payment.config';
-import { PaymentService } from './payment.service';
+import { PaymentService, resourceUrl } from './payment.service';
 import { startMockFacilitator, type MockFacilitator } from './mock-facilitator';
 import { PROTOCOL } from '../canonicalize/v1';
 
@@ -310,5 +310,36 @@ describe('x402-metered search', () => {
     } finally {
       await app.close();
     }
+  });
+});
+
+describe('the resource a 402 names', () => {
+  const request = (
+    headers: Record<string, string>,
+    host = 'api.wuzzy.io',
+    protocol = 'http',
+  ) => ({
+    protocol,
+    path: '/search',
+    header: (name: string) => headers[name.toLowerCase()],
+    get: (name: string) => (name.toLowerCase() === 'host' ? host : undefined),
+  });
+
+  it('names the scheme the caller used, not the one the socket saw', () => {
+    // Traefik and Cloudflare terminate TLS, so the socket is plain HTTP and a
+    // 402 would otherwise advertise a URL nobody called.
+    expect(resourceUrl(request({ 'x-forwarded-proto': 'https' }))).toBe(
+      'https://api.wuzzy.io/search',
+    );
+  });
+
+  it('takes the first scheme when each proxy in the chain appends one', () => {
+    expect(resourceUrl(request({ 'x-forwarded-proto': 'https,https' }))).toBe(
+      'https://api.wuzzy.io/search',
+    );
+  });
+
+  it('falls back to the socket scheme with nothing in front', () => {
+    expect(resourceUrl(request({}, 'localhost:3000'))).toBe('http://localhost:3000/search');
   });
 });

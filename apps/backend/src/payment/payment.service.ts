@@ -42,6 +42,32 @@ export interface PriceQuote {
 }
 
 /**
+ * The URL a 402 names as the thing being paid for.
+ *
+ * Behind Traefik and Cloudflare the socket is plain HTTP, so `request.protocol`
+ * reports `http` for a resource every client reached over TLS and the 402
+ * advertises a URL that is not the one anybody called. The forwarding header is
+ * read directly rather than by enabling Express's `trust proxy`, because that
+ * also redefines `request.ip`, and the web-search rate limiter counts hops from
+ * the right of `x-forwarded-for` itself with `request.ip` as its fallback.
+ * Changing what that fallback means would key every visitor on one bucket, and
+ * it would do it silently.
+ *
+ * Cloudflare in front of Traefik can send `https,https`, so only the first
+ * entry is a scheme.
+ */
+export function resourceUrl(request: {
+  protocol: string;
+  path: string;
+  header(name: string): string | undefined;
+  get(name: string): string | undefined;
+}): string {
+  const forwarded = request.header('x-forwarded-proto')?.split(',')[0]?.trim();
+  const scheme = forwarded || request.protocol;
+  return `${scheme}://${request.get('host') ?? 'localhost'}${request.path}`;
+}
+
+/**
  * The paying wallet, taken from the signed authorization rather than from the
  * facilitator's reply: this is the field the payer actually put a signature
  * over, so it is the one that can carry an authorization decision.

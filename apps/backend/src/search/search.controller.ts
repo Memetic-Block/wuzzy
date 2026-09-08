@@ -1,7 +1,7 @@
 import { Body, Controller, HttpStatus, Post, Req, Res } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { IndexesService, UnknownIndexError } from '../indexes/indexes.service';
-import { PaymentService, payerOf } from '../payment/payment.service';
+import { PaymentService, payerOf, resourceUrl } from '../payment/payment.service';
 import { EmptyQueryError, SearchService } from './search.service';
 
 interface SearchBody {
@@ -46,8 +46,7 @@ export class SearchController {
       return;
     }
 
-    const resourceUrl = `${request.protocol}://${request.get('host') ?? 'localhost'}${request.path}`;
-    const outcome = await this.payment.authorize(request.header('X-PAYMENT'), resourceUrl);
+    const outcome = await this.payment.authorize(request.header('X-PAYMENT'), resourceUrl(request));
 
     if (outcome.kind === 'rejected') {
       response.status(outcome.rejection.status).json(outcome.rejection.body);

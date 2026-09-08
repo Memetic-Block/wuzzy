@@ -14,7 +14,12 @@ import type { Request, Response } from 'express';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { CRAWL_QUEUE, crawlJobId, type CrawlJob } from '../queue/crawl.queue';
-import { PaymentService, payerOf, type PaymentAcceptance } from '../payment/payment.service';
+import {
+  PaymentService,
+  payerOf,
+  resourceUrl,
+  type PaymentAcceptance,
+} from '../payment/payment.service';
 import {
   IndexesService,
   InvalidUrlError,
@@ -239,9 +244,6 @@ export class IndexesController {
 }
 
 const header = (request: Request): string | undefined => request.header('X-PAYMENT');
-
-const resourceUrl = (request: Request): string =>
-  `${request.protocol}://${request.get('host') ?? 'localhost'}${request.path}`;
 
 /**
  * The payer owns what they commissioned. With the meter off there is no payer,
