@@ -26,7 +26,7 @@ schema, not a local invention, which is the part a rehearsal most needs to get r
 
 ## Bring it up
 
-Five processes. Each one prints what it bound to; none of them daemonise.
+Seven processes. Each one prints what it bound to; none of them daemonise.
 
     # 1. The chain. Anything after block 51018240 has the schema.
     anvil --fork-url https://mainnet.base.org
@@ -53,17 +53,42 @@ Five processes. Each one prints what it bound to; none of them daemonise.
     # 4. The facilitator.
     bun scripts/fork/facilitator.ts
 
-    # 5. The API, with the values step 3 printed.
-    POSTGRES_HOST=127.0.0.1 POSTGRES_PORT=5433 POSTGRES_DB=wuzzy_demo \
-    POSTGRES_USER=app POSTGRES_PASSWORD=app \
-    PORT=3002 SEARCH_MODE=lexical \
-    X402_ENABLED=true X402_NETWORK=base X402_PRICE='$0.01' \
-    X402_PAY_TO=<from step 3> X402_FACILITATOR_URL=http://127.0.0.1:39601 \
-    EAS_CHAIN=base BASE_RPC_URL=http://127.0.0.1:8545 \
-    bun apps/backend/src/main.ts
+    # 5. The queue's broker, if nothing already holds 6379. A commissioned
+    #    crawl is enqueued when its payment settles, so without this the API
+    #    takes the money, keeps the work, and starts none of it until the
+    #    sweeper next runs.
+    podman run --rm -p 6380:6379 docker.io/library/redis:7-alpine
 
-`SEARCH_MODE=lexical` so the rehearsal needs no embedding provider. Retrieval quality is not
-what is under test here; the payment and the provenance are.
+    # 6. The API and a worker, with the values step 3 printed. Both, not just
+    #    the API: the API only enqueues, and the worker is what crawls.
+    export POSTGRES_HOST=127.0.0.1 POSTGRES_PORT=5433 POSTGRES_DB=wuzzy_demo
+    export POSTGRES_USER=app POSTGRES_PASSWORD=app
+    export REDIS_HOST=127.0.0.1 REDIS_PORT=6380
+    export SEARCH_MODE=lexical
+    export X402_ENABLED=true X402_NETWORK=base X402_PRICE='$0.01'
+    export X402_PAY_TO=<from step 3> X402_FACILITATOR_URL=http://127.0.0.1:39601
+    export EAS_CHAIN=base BASE_RPC_URL=http://127.0.0.1:8545
+    export EMBEDDING_BASE_URL=http://127.0.0.1:39500
+    export EMBEDDING_MODEL=stub-embeddings EMBEDDING_DIMENSIONS=1536
+
+    PORT=3002 bun apps/backend/src/main.ts
+    bun apps/backend/src/worker.ts
+
+    # 7. Stub embeddings, which the worker needs to chunk what it crawls.
+    bun scripts/demo/stub-embeddings.ts
+
+`SEARCH_MODE=lexical` so the rehearsal needs no embedding provider for *retrieval*. The worker
+still embeds what it crawls, because retrieval reads chunks and nothing writes them otherwise,
+so the stub above stands in for a real provider. Ranking quality is not what is under test
+here; the payment and the provenance are.
+
+## The docs the client is told to read
+
+[BRIEFING.md](BRIEFING.md) points the client at `http://localhost:4000`, which is the separate
+`wuzzy-docs` repository. Serve the **built** site, not `rspress dev`: dev mode renders on the
+client, so an agent fetching a page over HTTP gets an empty shell and concludes there is no
+documentation. `rspress preview` also binds IPv6 only, so a client told to use `127.0.0.1`
+gets a refused connection. Build it and serve the output over both stacks.
 
 ## Rehearsing the live facilitator
 
