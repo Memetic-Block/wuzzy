@@ -2,7 +2,7 @@
 # Rewrites the deployed commit sha across every job spec in this directory.
 #
 # The cluster's Nomad does not support HCL2 variables, so each spec carries the
-# image tag literally. Editing thirteen sites by hand is how a deployment ends
+# image tag literally. Editing fourteen sites by hand is how a deployment ends
 # up half on one build and half on another, so this does all of them at once
 # and shows what changed.
 #

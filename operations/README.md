@@ -16,6 +16,7 @@ machine that can reach the `mb-hel` cluster; see [MANUAL-DEPLOY.md](MANUAL-DEPLO
 | [wuzzy-redis.hcl](wuzzy-redis.hcl) | service | `meta.env=store` | Broker for the crawl and attest queues. No persistence, by design. |
 | [wuzzy-worker.hcl](wuzzy-worker.hcl) | service | `meta.env=store` | Crawls and embeds what was paid for. Scale with `count`. |
 | [wuzzy-attester.hcl](wuzzy-attester.hcl) | service | `meta.env=store` | Writes the receipts. Holds the funded key. **Exactly one.** |
+| [wuzzy-seed.hcl](wuzzy-seed.hcl) | batch | `meta.env=store` | Crawls the curated seeds into the global index, then embeds. One shot. |
 | [wuzzy-pipeline.hcl](wuzzy-pipeline.hcl) | periodic batch | `meta.env=store` | Nightly crawl then embed, global index only. **Parked: not deployed.** |
 | [wuzzy-attest.hcl](wuzzy-attest.hcl) | batch | `meta.env=store` | Corpus-wide attestation backfill. Run by a human. |
 
@@ -37,7 +38,8 @@ So the pipeline is not redundant with the queue, and neither replaces the other.
 is the demo and dogfooding it, both of which exercise the paid path: commission, crawl, embed,
 attest, search. Recrawling and refresh serve a corpus that is being maintained over months,
 which is not what is being demonstrated. `wuzzy-pipeline.hcl` stays in this directory and stays
-unsubmitted; the global index is seeded by running `wuzzy crawl` by hand when it needs to be.
+unsubmitted; the global index is seeded by [wuzzy-seed.hcl](wuzzy-seed.hcl), which is the same two commands
+under caps, submitted once and watched.
 
 Two consequences to hold, rather than to fix now:
 

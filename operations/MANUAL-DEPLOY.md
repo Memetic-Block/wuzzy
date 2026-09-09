@@ -164,6 +164,37 @@ free to rule out first:
 It asks the facilitator what it settles and fails unless that includes an exact payment on Base
 mainnet. It never prints the credentials.
 
+## Seeding the global index
+
+An unscoped `/search` reads the global index, so until this runs the public site answers every
+query with nothing. It is a batch job rather than a shell in a running allocation, because the
+database is on the private network and the embedding key is in Vault.
+
+    nomad job run operations/wuzzy-seed.hcl
+    nomad alloc logs -f <alloc-id>
+
+Expect `seeds.json: 7 host(s)`, then a summary line `created N changed N unchanged N skipped N
+failed N fresh N`, then `embedded N document(s), M chunk(s)`. Watch it from outside as well,
+which needs no cluster access:
+
+    curl -s https://api.wuzzy.io/indexes/global
+
+**This spends gas without being asked to.** `wuzzy-attester` is running, and its sweeper derives
+its work from the database rather than from a queue message, so every document the job embeds is
+attested within a minute of the embed pass finishing. Check the balance before submitting, and
+read the caps in the spec as a spend ceiling:
+
+    curl -s -X POST https://mainnet.base.org -H 'content-type: application/json' \
+      -d '{"jsonrpc":"2.0","id":1,"method":"eth_getBalance","params":["<attester>","latest"]}'
+
+Half a cent per page at the gas measured on 2026-09-09, so the spec's `--max=1500` is about
+7.50 USD. An attester that runs dry does not lose the work: the receipts are owed by the
+database, the sweeper re-asks every minute, and funding it is what completes them.
+
+Re-running is safe. The crawler skips what a sitemap reports unchanged and anything fetched
+inside `CRAWL_MAX_AGE_DAYS`, so a second submission fetches only what is new or stale, and the
+embed pass only picks up documents with no embedding.
+
 ## Attesting
 
 This one spends money. Read [SCHEMA.md](../SCHEMA.md) first for what it costs, and provision
