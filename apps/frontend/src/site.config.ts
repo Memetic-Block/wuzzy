@@ -69,7 +69,14 @@ export const site = {
     'Every result carries an onchain receipt — what was crawled, when, and proof nobody has rearranged it since.',
 
   description:
-    'A search index for AI agents. Keyless and metered over x402, with onchain provenance on every result.',
+    'Provable, decentralized search. Commission an index over any sources — every page attested on Base, keyless queries via x402.',
+
+  /**
+   * What a link unfurl shows as the headline. Separate from a page's `<title>`,
+   * which names the page inside a tab: "Wuzzy" is right above the content and
+   * says nothing in a card posted somewhere else.
+   */
+  socialTitle: 'Wuzzy — provable, decentralized search',
 
   queryPrice,
   queryPriceAtomic: atomicUsdc(queryPrice),

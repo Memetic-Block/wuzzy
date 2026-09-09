@@ -22,13 +22,13 @@ export const Layout = ({ title, children }: { title: string; children?: Children
       <link rel="icon" type="image/png" href="/favicon.png" />
 
       <meta property="og:site_name" content={site.name} />
-      <meta property="og:title" content={title} />
+      <meta property="og:title" content={site.socialTitle} />
       <meta property="og:description" content={site.description} />
       <meta property="og:type" content="website" />
       <meta property="og:url" content={site.origin} />
       <meta property="og:image" content={`${site.origin}/brand/wuzzy-og.png`} />
       <meta name="twitter:card" content="summary_large_image" />
-      <meta name="twitter:title" content={title} />
+      <meta name="twitter:title" content={site.socialTitle} />
       <meta name="twitter:description" content={site.description} />
       <meta name="twitter:image" content={`${site.origin}/brand/wuzzy-og.png`} />
 
