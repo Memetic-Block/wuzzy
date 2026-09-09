@@ -50,7 +50,7 @@ job "wuzzy-migrate" {
       driver = "docker"
 
       config {
-        image = "ghcr.io/memetic-block/wuzzy-backend:sha-427ad6442149b5882f4f0b045fab0ad22f157155"
+        image = "ghcr.io/memetic-block/wuzzy-backend:sha-170aa22e9797ee11416847e4a6ea857a720f2273"
 
         # Not `bun run migration:run`. Bun's workspace install hoists packages
         # to the repository root in the image, so the `apps/backend/node_modules`
