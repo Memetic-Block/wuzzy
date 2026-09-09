@@ -55,7 +55,7 @@ job "wuzzy-admin" {
       driver = "docker"
 
       config {
-        image = "ghcr.io/memetic-block/wuzzy-backend:sha-2b8a92fd8c1931dc10f0622772345c2ac3b4845d"
+        image = "ghcr.io/memetic-block/wuzzy-backend:sha-427ad6442149b5882f4f0b045fab0ad22f157155"
         ports = ["api"]
       }
 
@@ -101,7 +101,7 @@ job "wuzzy-admin" {
       driver = "docker"
 
       config {
-        image = "ghcr.io/memetic-block/wuzzy-admin:sha-2b8a92fd8c1931dc10f0622772345c2ac3b4845d"
+        image = "ghcr.io/memetic-block/wuzzy-admin:sha-427ad6442149b5882f4f0b045fab0ad22f157155"
         ports = ["http"]
       }
 
