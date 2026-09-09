@@ -55,7 +55,7 @@ job "wuzzy-admin" {
       driver = "docker"
 
       config {
-        image = "ghcr.io/memetic-block/wuzzy-backend:sha-b13567c0482148c34cfeda3bebfd42bd5febd8cf"
+        image = "ghcr.io/memetic-block/wuzzy-backend:sha-7aa6f9f997a1cd0ee97a1ff0f168cddc697165ac"
         ports = ["api"]
       }
 
@@ -83,8 +83,8 @@ job "wuzzy-admin" {
                of writing the string "<no value>" into the environment. An
                absent ADMIN_TOKEN would otherwise become the password, and an
                absent password would fail as a database error naming nothing. */}}
-        POSTGRES_PASSWORD={{ .Data.data.POSTGRES_PASSWORD | required "POSTGRES_PASSWORD missing from kv/wuzzy/api" }}
-        ADMIN_TOKEN={{ .Data.data.ADMIN_TOKEN | required "ADMIN_TOKEN missing from kv/wuzzy/api" }}
+        POSTGRES_PASSWORD="{{ .Data.data.POSTGRES_PASSWORD }}"
+        ADMIN_TOKEN="{{ .Data.data.ADMIN_TOKEN }}"
         {{- end }}
         EOT
         destination = "secrets/admin-api.env"
@@ -101,7 +101,7 @@ job "wuzzy-admin" {
       driver = "docker"
 
       config {
-        image = "ghcr.io/memetic-block/wuzzy-admin:sha-b13567c0482148c34cfeda3bebfd42bd5febd8cf"
+        image = "ghcr.io/memetic-block/wuzzy-admin:sha-7aa6f9f997a1cd0ee97a1ff0f168cddc697165ac"
         ports = ["http"]
       }
 
