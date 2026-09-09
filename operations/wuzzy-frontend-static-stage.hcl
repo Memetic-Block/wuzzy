@@ -30,7 +30,7 @@ job "wuzzy-frontend-static-stage" {
       driver = "docker"
 
       config {
-        image = "ghcr.io/memetic-block/wuzzy-frontend-deploy:sha-daf360047b25625e9788392f60b516e6e4ec6df2"
+        image = "ghcr.io/memetic-block/wuzzy-frontend-deploy:sha-b13567c0482148c34cfeda3bebfd42bd5febd8cf"
       }
 
       env {
@@ -40,7 +40,7 @@ job "wuzzy-frontend-static-stage" {
         # dashboard before trusting a stage deploy: a mismatch does not fail, it
         # quietly publishes to a preview URL instead.
         PAGES_BRANCH  = "main"
-        COMMIT_SHA    = "daf360047b25625e9788392f60b516e6e4ec6df2"
+        COMMIT_SHA    = "b13567c0482148c34cfeda3bebfd42bd5febd8cf"
 
         # Read by apps/frontend/src/site.config.ts while the pages render.
         SITE_ORIGIN     = "https://stage.wuzzy.io"
