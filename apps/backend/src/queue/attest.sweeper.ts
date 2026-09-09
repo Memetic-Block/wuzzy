@@ -43,6 +43,33 @@ export class AttestSweeper implements OnApplicationBootstrap {
     this.timer.unref?.();
   }
 
+  /**
+   * Asks for one index, and means it.
+   *
+   * BullMQ deduplicates on the job id, which is what stops two attesters
+   * racing the same index. But an id belonging to a job that has already
+   * finished counts too, so once a job fails, every later `add` returns that
+   * dead job instead of enqueueing work, and does it without erroring. The
+   * sweeper then runs every minute doing nothing at all, which is how one
+   * out-of-gas attester left an index unattested while the logs said it was
+   * being swept.
+   *
+   * So a finished job holding the id is cleared and the ask repeated. Nothing
+   * is lost by removing it: what is owed lives in the database, and the error
+   * was logged when it happened.
+   */
+  private async enqueue(indexId: string): Promise<void> {
+    const jobId = attestJobId(indexId);
+    const job = await this.queue.add(ATTEST_QUEUE, { indexId }, { jobId });
+
+    const state = await job.getState();
+    if (state !== 'completed' && state !== 'failed') return;
+
+    await job.remove();
+    await this.queue.add(ATTEST_QUEUE, { indexId }, { jobId });
+    this.logger.warn(`cleared a ${state} attest job holding ${jobId} and asked again`);
+  }
+
   async sweep(): Promise<number> {
     const owed: { index_id: string }[] = await this.dataSource.query(
       `SELECT DISTINCT m.index_id
@@ -56,11 +83,7 @@ export class AttestSweeper implements OnApplicationBootstrap {
       // unhandled rejection here would not delay one index's receipts, it
       // would take down the process that was going to attest all of them.
       try {
-        await this.queue.add(
-          ATTEST_QUEUE,
-          { indexId: row.index_id },
-          { jobId: attestJobId(row.index_id) },
-        );
+        await this.enqueue(row.index_id);
       } catch (error) {
         this.logger.error(
           `could not enqueue ${row.index_id}: ${error instanceof Error ? error.message : error}`,

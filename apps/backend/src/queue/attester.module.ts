@@ -41,7 +41,14 @@ import { AttestSweeper } from './attest.sweeper';
         attempts: 3,
         backoff: { type: 'exponential', delay: 60_000 },
         removeOnComplete: { age: 3_600, count: 100 },
-        removeOnFail: { age: 86_400 },
+        // Removed rather than kept. The sweepers re-ask by a deterministic job
+        // id, and BullMQ treats an id that still exists as already enqueued,
+        // so a retained failure silently swallows every re-ask until it ages
+        // out. That turns "the queue is a trigger, the database is the record"
+        // into a day-long outage for one index: exactly what happened when the
+        // attester ran out of gas on 2026-09-08. A failure carries nothing the
+        // database does not already know, and the processor logs the error.
+        removeOnFail: true,
       },
     }),
   ],

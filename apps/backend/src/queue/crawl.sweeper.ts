@@ -35,6 +35,28 @@ export class CrawlSweeper implements OnApplicationBootstrap {
     this.timer.unref?.();
   }
 
+  /**
+   * Asks for one index, and means it.
+   *
+   * BullMQ deduplicates on the job id, and an id belonging to a job that has
+   * already finished counts too: once a job fails, every later `add` returns
+   * that dead job rather than enqueueing, and does it without erroring. A
+   * sweeper that exists to re-ask would then do nothing, quietly, for as long
+   * as the failure is retained. Somebody has paid for these pages, so the
+   * finished job is cleared and the ask repeated.
+   */
+  private async enqueue(indexId: string): Promise<void> {
+    const jobId = crawlJobId(indexId);
+    const job = await this.queue.add(CRAWL_QUEUE, { indexId }, { jobId });
+
+    const state = await job.getState();
+    if (state !== 'completed' && state !== 'failed') return;
+
+    await job.remove();
+    await this.queue.add(CRAWL_QUEUE, { indexId }, { jobId });
+    this.logger.warn(`cleared a ${state} crawl job holding ${jobId} and asked again`);
+  }
+
   async sweep(): Promise<number> {
     const owed: { index_id: string }[] = await this.dataSource.query(
       `SELECT DISTINCT index_id FROM index_urls WHERE crawled_at IS NULL`,
@@ -48,11 +70,7 @@ export class CrawlSweeper implements OnApplicationBootstrap {
       // worker, so an unhandled rejection here does not delay one crawl, it
       // takes down the process that was going to do all of them.
       try {
-        await this.queue.add(
-          CRAWL_QUEUE,
-          { indexId: row.index_id },
-          { jobId: crawlJobId(row.index_id) },
-        );
+        await this.enqueue(row.index_id);
       } catch (error) {
         this.logger.error(
           `could not enqueue ${row.index_id}: ${error instanceof Error ? error.message : error}`,

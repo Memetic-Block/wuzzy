@@ -144,8 +144,34 @@ const queued: { name: string; data: { indexId: string }; opts?: { jobId?: string
 const fakeQueue = {
   add: async (name: string, data: { indexId: string }, opts?: { jobId?: string }) => {
     queued.push({ name, data, opts });
-    return { id: opts?.jobId };
+    return { id: opts?.jobId, getState: async () => 'waiting', remove: async () => {} };
   },
+};
+
+/**
+ * A queue holding a finished job under the id the sweeper asks with, which is
+ * what BullMQ hands back instead of enqueueing anything. Retained failures are
+ * the case that matters: an attester that ran out of gas leaves one behind, and
+ * a sweeper that believes its own `add` then re-asks forever into a dead job.
+ */
+const stuckQueue = (state: 'failed' | 'completed') => {
+  const removed: string[] = [];
+  let cleared = false;
+  return {
+    removed,
+    add: async (name: string, data: { indexId: string }, opts?: { jobId?: string }) => {
+      queued.push({ name, data, opts });
+      const settled = cleared ? 'waiting' : state;
+      return {
+        id: opts?.jobId,
+        getState: async () => settled,
+        remove: async () => {
+          cleared = true;
+          removed.push(opts?.jobId ?? '');
+        },
+      };
+    },
+  };
 };
 
 /** Boots /search and /indexes together, metered against the mock facilitator. */
@@ -559,6 +585,39 @@ describe('configurable indexes', () => {
     const swept = await new AttestSweeper(source, fakeQueue as never).sweep();
     expect(swept).toBeGreaterThan(0);
     expect(queued.some((job) => job.opts?.jobId === attestJobId(commissioned.id))).toBe(true);
+  });
+
+  it('re-asks past a failed job holding the id it asks with', async () => {
+    const source = ready();
+    if (!source) return;
+
+    const origin = (
+      await site({ '/robots.txt': ROBOTS_ALLOW_ALL, '/one': page('One', PROSE) })
+    ).origin;
+    const service = new IndexesService(source, indexesConfig);
+    const commissioned = await service.create({
+      owner: WALLET_A,
+      name: 'Stuck',
+      urls: [`${origin}/one`],
+    });
+    await new CrawlProcessor(source, fakeQueue as never, stubEmbedder()).process({
+      data: { indexId: commissioned.id },
+    } as Job<CrawlJob>);
+
+    // What an attester that ran out of gas leaves behind. BullMQ hands the dead
+    // job back rather than enqueueing, and reports no error while doing it, so
+    // a sweeper that trusts its own `add` sweeps forever and attests nothing.
+    const stuck = stuckQueue('failed');
+    queued.length = 0;
+
+    const swept = await new AttestSweeper(source, stuck as never).sweep();
+    expect(swept).toBeGreaterThan(0);
+
+    // The dead job is cleared and the ask repeated, so the debt is actually
+    // enqueued rather than swallowed.
+    expect(stuck.removed).toContain(attestJobId(commissioned.id));
+    const asks = queued.filter((job) => job.opts?.jobId === attestJobId(commissioned.id));
+    expect(asks.length).toBe(2);
   });
 
   scenario('status moves while the crawl is still running', async () => {
