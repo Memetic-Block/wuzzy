@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { HealthController } from './health/health.controller';
 import { AdminModule } from './admin/admin.module';
 import { DatabaseModule } from './database/database.module';
+import { DiscoveryModule } from './discovery/discovery.module';
 import { IndexesModule } from './indexes/indexes.module';
 import { SearchModule } from './search/search.module';
 
@@ -13,6 +14,7 @@ import { SearchModule } from './search/search.module';
     IndexesModule,
     SearchModule,
     AdminModule,
+    DiscoveryModule,
   ],
   controllers: [HealthController],
 })
