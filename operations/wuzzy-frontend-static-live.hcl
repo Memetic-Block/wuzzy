@@ -30,7 +30,7 @@ job "wuzzy-frontend-static-live" {
       driver = "docker"
 
       config {
-        image = "ghcr.io/memetic-block/wuzzy-frontend-deploy:sha-2274da008707046fda203889be571f488c4994d0"
+        image = "ghcr.io/memetic-block/wuzzy-frontend-deploy:sha-daf360047b25625e9788392f60b516e6e4ec6df2"
       }
 
       env {
@@ -42,7 +42,7 @@ job "wuzzy-frontend-static-live" {
         # *.pages.dev preview while wuzzy.io keeps serving whatever it had. It
         # is named for a git branch but nothing here has one; it is a label.
         PAGES_BRANCH  = "main"
-        COMMIT_SHA    = "2274da008707046fda203889be571f488c4994d0"
+        COMMIT_SHA    = "daf360047b25625e9788392f60b516e6e4ec6df2"
 
         # Read by apps/frontend/src/site.config.ts while the pages render.
         SITE_ORIGIN     = "https://wuzzy.io"
