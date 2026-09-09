@@ -79,8 +79,12 @@ job "wuzzy-admin" {
         POSTGRES_PORT={{ .Port }}
         {{- end }}
         {{- with secret "kv/wuzzy/api" }}
-        POSTGRES_PASSWORD={{ .Data.data.POSTGRES_PASSWORD }}
-        ADMIN_TOKEN={{ .Data.data.ADMIN_TOKEN }}
+        {{- /* `required` so a key missing from Vault fails the render instead
+               of writing the string "<no value>" into the environment. An
+               absent ADMIN_TOKEN would otherwise become the password, and an
+               absent password would fail as a database error naming nothing. */}}
+        POSTGRES_PASSWORD={{ .Data.data.POSTGRES_PASSWORD | required "POSTGRES_PASSWORD missing from kv/wuzzy/api" }}
+        ADMIN_TOKEN={{ .Data.data.ADMIN_TOKEN | required "ADMIN_TOKEN missing from kv/wuzzy/api" }}
         {{- end }}
         EOT
         destination = "secrets/admin-api.env"
