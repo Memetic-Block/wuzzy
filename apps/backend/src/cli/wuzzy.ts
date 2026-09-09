@@ -9,7 +9,7 @@
 import 'reflect-metadata';
 import { DataSource } from 'typeorm';
 import { buildDataSourceOptions } from '../database/typeorm.config';
-import { crawl } from '../crawl/crawler';
+import { crawl, crawlExitCode } from '../crawl/crawler';
 import { readSeeds } from '../crawl/seeds';
 import { embedPending } from '../embed/embed';
 import { attestPending, createEasSubmitter, MissingAttesterKeyError } from '../attest/attestor';
@@ -106,7 +106,7 @@ async function main(argv: readonly string[]): Promise<number> {
             `unchanged ${summary.unchanged}  skipped ${summary.skipped}  ` +
             `failed ${summary.failed}  fresh ${summary.fresh}`,
         );
-        return summary.failed > 0 ? 1 : 0;
+        return crawlExitCode(summary);
       }
       case 'embed': {
         const summary = await embedPending(dataSource);

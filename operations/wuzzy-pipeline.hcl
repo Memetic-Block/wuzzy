@@ -41,8 +41,14 @@ job "wuzzy-pipeline" {
       config {
         image      = "ghcr.io/memetic-block/wuzzy-backend:sha-24aa7209b07167309ee2b412ba1e335cfb344c2a"
         entrypoint = ["/bin/sh", "-c"]
+        # Not `set -e`. Embedding what the crawl landed is worth doing even
+        # when the crawl itself reports a problem, and chaining them meant one
+        # unreachable URL discarded a whole corpus: the crawl exited non-zero,
+        # the shell stopped, and 3,751 pages sat unembedded and unattested
+        # while the job reported nothing but its own failure. Both stages run,
+        # both statuses are kept, and the job fails if either did.
         args = [
-          "set -e; bun apps/backend/src/cli/wuzzy.ts crawl; bun apps/backend/src/cli/wuzzy.ts embed",
+          "bun apps/backend/src/cli/wuzzy.ts crawl; crawled=$?; bun apps/backend/src/cli/wuzzy.ts embed; embedded=$?; [ $crawled -eq 0 ] && [ $embedded -eq 0 ]",
         ]
       }
 

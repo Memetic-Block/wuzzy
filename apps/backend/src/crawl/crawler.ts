@@ -72,6 +72,26 @@ export type CrawlSummary = Record<FetchOutcome | 'failed', number> & {
   fresh: number;
 };
 
+/**
+ * Whether a finished crawl should be reported as a failed run.
+ *
+ * Not "a page failed". A crawl of thousands of URLs across seven hosts meets a
+ * 404, a timeout and a hostile CDN as a matter of course; those are recorded in
+ * fetch_log, and they are data about the web rather than a verdict on the run.
+ * Treating any of them as a failure made a healthy crawl exit 1, and under
+ * `set -e` in the seed job that meant 3,751 pages were crawled and then never
+ * embedded or attested, with the job reporting only that it had failed.
+ *
+ * A run failed when it has nothing to show for itself: nothing landed, pages a
+ * sitemap called fresh included, and something did go wrong. That is the same
+ * rule `crawl --index` already applies, which fails only when it indexed none
+ * of what somebody paid for.
+ */
+export function crawlExitCode(summary: CrawlSummary): number {
+  const landed = summary.created + summary.changed + summary.unchanged + summary.fresh;
+  return landed === 0 && summary.failed > 0 ? 1 : 0;
+}
+
 /** Re-fetch after this long even when a sitemap claims nothing has changed. */
 export const DEFAULT_MAX_AGE_DAYS = 14;
 

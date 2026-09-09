@@ -8,7 +8,7 @@ import { FetchLogEntity } from '../database/fetch-log.entity';
 import { buildDataSourceOptions } from '../database/typeorm.config';
 import { truncateWuzzyTables } from '../testing/database';
 import { scenario } from '../testing/scenario';
-import { crawl, interleaveByHost, sitemapsFor } from './crawler';
+import { crawl, interleaveByHost, sitemapsFor, crawlExitCode } from './crawler';
 import { PROSE, page, startMockSite, type MockSite } from './mock-site';
 
 // Crawlee narrates every run at INFO, which buries the test output.
@@ -571,5 +571,29 @@ describe('sitemap freshness', () => {
     // Age alone eventually forces it, since nothing else ever will.
     await crawl(source, { seeds: [`${mock.origin}/`], maxAgeDays: 0 });
     expect(mock.requests.filter((r) => r.url === '/guide').length).toBeGreaterThan(before);
+  });
+});
+
+describe('crawl exit code', () => {
+  const summary = (over: Partial<Record<string, number>> = {}) => ({
+    created: 0, unchanged: 0, changed: 0, skipped: 0, failed: 0, fresh: 0,
+    ...over,
+  }) as Parameters<typeof crawlExitCode>[0];
+
+  it('does not fail a run over pages the web refused', () => {
+    // The shape the seed job actually produced: 3,751 pages already fresh, two
+    // URLs that would not answer. Reporting that as a failed run is what kept
+    // the embed pass from ever running.
+    expect(crawlExitCode(summary({ fresh: 3751, unchanged: 2, skipped: 86, failed: 2 }))).toBe(0);
+  });
+
+  it('fails a run that landed nothing at all', () => {
+    expect(crawlExitCode(summary({ failed: 12 }))).toBe(1);
+  });
+
+  it('does not fail a run that simply had nothing to do', () => {
+    // No failures and no pages is a crawl of a corpus that is entirely fresh,
+    // which is the normal outcome of running it twice in a day.
+    expect(crawlExitCode(summary())).toBe(0);
   });
 });
