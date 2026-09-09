@@ -39,7 +39,7 @@ job "wuzzy-pipeline" {
       driver = "docker"
 
       config {
-        image      = "ghcr.io/memetic-block/wuzzy-backend:sha-577fd65513a56310c10de508e4bcc199b2250f5a"
+        image      = "ghcr.io/memetic-block/wuzzy-backend:sha-2d6de67e518f1f5aa3d4fd967ea802505f81d1b1"
         entrypoint = ["/bin/sh", "-c"]
         # Not `set -e`. Embedding what the crawl landed is worth doing even
         # when the crawl itself reports a problem, and chaining them meant one
