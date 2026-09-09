@@ -1,4 +1,4 @@
-import { InjectQueue, Processor, WorkerHost } from '@nestjs/bullmq';
+import { InjectQueue, OnWorkerEvent, Processor, WorkerHost } from '@nestjs/bullmq';
 import { Inject, Logger, Optional } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
@@ -69,4 +69,18 @@ export class CrawlProcessor extends WorkerHost {
       );
     }
   }
+
+  /**
+   * Says why a crawl failed. Same reason as the attester's: BullMQ emits
+   * `failed`, nothing listens, and a paid-for crawl that throws leaves an
+   * index short with no line anywhere saying so.
+   */
+  @OnWorkerEvent('failed')
+  onFailed(job: Job<CrawlJob> | undefined, error: Error): void {
+    this.logger.error(
+      `index ${job?.data?.indexId ?? 'unknown'}: crawl job failed: ${error?.message ?? error}`,
+      error?.stack,
+    );
+  }
+
 }

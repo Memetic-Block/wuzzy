@@ -5,6 +5,9 @@ import { DataSource } from 'typeorm';
 import { Queue } from 'bullmq';
 import { ATTEST_QUEUE, attestJobId, type AttestJob } from './attest.queue';
 
+/** Sweeps a job may sit in flight before the log stops being polite about it. */
+const STUCK_SWEEPS = 5;
+
 /**
  * Enqueues any index holding embedded documents that carry no attestation.
  *
@@ -31,6 +34,13 @@ export class AttestSweeper implements OnApplicationBootstrap {
    * to a processor that says nothing until it finishes.
    */
   private previous = '';
+  /**
+   * Whether this process has swept yet. The first sweep is allowed to clear a
+   * job in any state, which no later sweep may do.
+   */
+  private swept = false;
+  /** How many consecutive sweeps have found a job already in flight. */
+  private readonly waitingOn = new Map<string, { state: string; sweeps: number }>();
 
   constructor(
     @InjectDataSource() private readonly dataSource: DataSource,
@@ -63,11 +73,41 @@ export class AttestSweeper implements OnApplicationBootstrap {
     const job = await this.queue.add(ATTEST_QUEUE, { indexId }, { jobId });
 
     const state = await job.getState();
-    if (state !== 'completed' && state !== 'failed') return;
+    // A finished job still holds its id, so every later `add` returns the dead
+    // job instead of enqueueing work, and does it without erroring. On the
+    // first sweep after a boot an *unfinished* job is stale too: exactly one
+    // attester runs, and it is this process, which has only just started, so a
+    // job someone claimed to be running belongs to a process that is gone.
+    // That is what left an orphaned `active` job blocking the queue across a
+    // restart on 2026-09-09, with the sweeper skipping it in silence.
+    const stale = state === 'completed' || state === 'failed' || !this.swept;
+    if (!stale) {
+      this.report(jobId, state);
+      return;
+    }
+    this.waitingOn.delete(jobId);
 
     await job.remove();
     await this.queue.add(ATTEST_QUEUE, { indexId }, { jobId });
     this.logger.warn(`cleared a ${state} attest job holding ${jobId} and asked again`);
+  }
+
+  /**
+   * Says when a job has been in flight across several sweeps.
+   *
+   * A steady state should be quiet, but silence must never be the only thing a
+   * stuck attester produces. Skipping an in-flight job is normal for the
+   * minutes a large batch takes and pathological after that, and the two are
+   * indistinguishable from the outside unless this says so.
+   */
+  private report(jobId: string, state: string): void {
+    const seen = this.waitingOn.get(jobId);
+    const sweeps = seen?.state === state ? seen.sweeps + 1 : 1;
+    this.waitingOn.set(jobId, { state, sweeps });
+    if (sweeps === 1 || sweeps % STUCK_SWEEPS === 0) {
+      const how = sweeps === 1 ? 'is' : `has been, for ${sweeps} sweeps,`;
+      this.logger[sweeps === 1 ? 'log' : 'warn'](`${jobId} ${how} ${state}; not asking again yet`);
+    }
   }
 
   async sweep(): Promise<number> {
@@ -103,6 +143,9 @@ export class AttestSweeper implements OnApplicationBootstrap {
       }
       this.previous = current;
     }
+    // Set last: everything above ran as this process's first sweep, and only
+    // that sweep may clear a job someone claims to be running.
+    this.swept = true;
     return owed.length;
   }
 }

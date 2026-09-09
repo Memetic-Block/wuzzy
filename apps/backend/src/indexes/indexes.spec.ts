@@ -154,7 +154,7 @@ const fakeQueue = {
  * the case that matters: an attester that ran out of gas leaves one behind, and
  * a sweeper that believes its own `add` then re-asks forever into a dead job.
  */
-const stuckQueue = (state: 'failed' | 'completed') => {
+const stuckQueue = (state: 'failed' | 'completed' | 'active') => {
   const removed: string[] = [];
   let cleared = false;
   return {
@@ -171,6 +171,21 @@ const stuckQueue = (state: 'failed' | 'completed') => {
         },
       };
     },
+  };
+};
+
+/** A queue whose job never finishes, which is what an orphan looks like. */
+const alwaysActive = () => {
+  const removed: string[] = [];
+  return {
+    removed,
+    add: async (_name: string, _data: { indexId: string }, opts?: { jobId?: string }) => ({
+      id: opts?.jobId,
+      getState: async () => 'active',
+      remove: async () => {
+        removed.push(opts?.jobId ?? '');
+      },
+    }),
   };
 };
 
@@ -618,6 +633,48 @@ describe('configurable indexes', () => {
     expect(stuck.removed).toContain(attestJobId(commissioned.id));
     const asks = queued.filter((job) => job.opts?.jobId === attestJobId(commissioned.id));
     expect(asks.length).toBe(2);
+  });
+
+  it('clears an orphaned job the last attester left running', async () => {
+    const source = ready();
+    if (!source) return;
+
+    const origin = (
+      await site({ '/robots.txt': ROBOTS_ALLOW_ALL, '/one': page('One', PROSE) })
+    ).origin;
+    const service = new IndexesService(source, indexesConfig);
+    const commissioned = await service.create({
+      owner: WALLET_A,
+      name: 'Orphaned',
+      urls: [`${origin}/one`],
+    });
+    await new CrawlProcessor(source, fakeQueue as never, stubEmbedder()).process({
+      data: { indexId: commissioned.id },
+    } as Job<CrawlJob>);
+
+    // What killing an attester mid-batch leaves behind: a job BullMQ still
+    // believes is running, belonging to a process that no longer exists. It is
+    // not failed and not completed, so a sweeper that only clears finished
+    // jobs skips it every minute, in silence, forever.
+    const orphan = stuckQueue('active');
+    queued.length = 0;
+
+    // Exactly one attester runs, and it is this one, which has just started.
+    // So a job claiming to be in flight on the first sweep after a boot is
+    // owned by nobody and can be cleared.
+    const sweeper = new AttestSweeper(source, orphan as never);
+    expect(await sweeper.sweep()).toBeGreaterThan(0);
+    expect(orphan.removed).toContain(attestJobId(commissioned.id));
+
+    // Once this process has swept, an in-flight job is left alone: a large
+    // batch legitimately takes minutes, and clearing one would put two
+    // attesters on a single nonce.
+    const running = alwaysActive();
+    const settled = new AttestSweeper(source, running as never);
+    await settled.sweep();
+    running.removed.length = 0;
+    await settled.sweep();
+    expect(running.removed).toHaveLength(0);
   });
 
   scenario('status moves while the crawl is still running', async () => {

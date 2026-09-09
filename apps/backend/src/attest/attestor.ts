@@ -74,6 +74,19 @@ export async function attestPending(
   const documents = dataSource.getRepository(DocumentEntity);
   const query = documents
     .createQueryBuilder('document')
+    // Only what an attestation commits to. `getMany()` otherwise hydrates the
+    // whole entity, and `content` is the canonical markdown of every page:
+    // nothing here reads it, but a backlog of a few thousand documentation
+    // pages then arrives as hundreds of megabytes of strings in an attester
+    // sized at 1GB, before a single receipt is written.
+    .select([
+      'document.id',
+      'document.url',
+      'document.protocolVersion',
+      'document.contentHash',
+      'document.rawHash',
+      'document.fetchedAt',
+    ])
     .where('document.attestationUid IS NULL')
     .orderBy('document.updatedAt', 'ASC');
   if (options.embeddedOnly !== false) query.andWhere('document.embeddedAt IS NOT NULL');
