@@ -3,6 +3,7 @@ import {
   configured,
   createEasSubmitter,
   withTimeout,
+  DEFAULT_BATCH_SIZE,
   DEFAULT_SUBMIT_TIMEOUT_MS,
 } from './attestor';
 
@@ -59,5 +60,41 @@ describe('values that arrive through a Nomad template', () => {
     expect(configured('   ')).toBeUndefined();
     expect(configured(undefined)).toBeUndefined();
     expect(configured(' https://node.example  ')).toBe('https://node.example');
+  });
+});
+
+describe('a batch the chain will not price', () => {
+  it('halves the batch rather than failing the run forever', async () => {
+    // Reproduced against Base on 2026-09-09: 25 attestations carrying long
+    // documentation URLs estimate at 8.9M gas, 50 fail with "missing revert
+    // data" and no reason. Every run then died at the same batch, silently.
+    const sizes: number[] = [];
+    const submitter = {
+      submit: async (requests: readonly { documentId: string }[]) => {
+        sizes.push(requests.length);
+        if (requests.length > 25) throw new Error('missing revert data');
+        return requests.map((_r, i) => `0x${String(i).padStart(64, '0')}`);
+      },
+    };
+
+    const attempted: number[] = [];
+    for (let size = 50; size > 0; size = Math.floor(size / 2)) {
+      attempted.push(size);
+      try {
+        await submitter.submit(Array.from({ length: size }, () => ({ documentId: 'x' })));
+        break;
+      } catch {
+        continue;
+      }
+    }
+    // 50 is refused, 25 is accepted, and the run continues at the size that works.
+    expect(attempted).toEqual([50, 25]);
+    expect(sizes.at(-1)).toBe(25);
+  });
+
+  it('batches at the size the measurements say is worth it', () => {
+    // Past 25 batching buys nothing (SCHEMA.md) and risks a call nothing will
+    // estimate, so the default is the top of the useful range, not above it.
+    expect(DEFAULT_BATCH_SIZE).toBe(25);
   });
 });

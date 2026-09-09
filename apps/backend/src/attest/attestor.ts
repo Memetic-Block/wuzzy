@@ -43,6 +43,19 @@ export interface AttestOptions {
   readonly onBatch?: (progress: AttestProgress) => void;
 }
 
+/**
+ * Documents per transaction.
+ *
+ * Twenty-five rather than fifty, and not arbitrary: SCHEMA.md measures the
+ * saving from batching as worth about 14% and flat past 25, so the larger
+ * batch bought nothing and cost the run. At 50 attestations carrying long
+ * documentation URLs the call needs roughly 18M gas, which `eth_estimateGas`
+ * refuses to price and reports without a revert reason, so every attempt fails
+ * identically and forever. Measured against Base on 2026-09-09: 25 estimates
+ * at 8.9M gas, 50 does not estimate at all.
+ */
+export const DEFAULT_BATCH_SIZE = 25;
+
 export interface AttestProgress {
   readonly attested: number;
   readonly total: number;
@@ -70,7 +83,7 @@ export async function attestPending(
     throw new Error(`attestation schema must carry no content: "${SCHEMA_DEFINITION}"`);
   }
 
-  const batchSize = options.batchSize ?? 50;
+  const batchSize = options.batchSize ?? DEFAULT_BATCH_SIZE;
   const documents = dataSource.getRepository(DocumentEntity);
   const query = documents
     .createQueryBuilder('document')
@@ -104,8 +117,9 @@ export async function attestPending(
   let attested = 0;
   let batches = 0;
 
-  for (let start = 0; start < pending.length; start += batchSize) {
-    const batch = pending.slice(start, start + batchSize);
+  let size = batchSize;
+  for (let start = 0; start < pending.length; ) {
+    const batch = pending.slice(start, start + size);
     const requests = batch.map((document) => ({
       documentId: document.id,
       recipient: ethers.ZeroAddress,
@@ -118,7 +132,23 @@ export async function attestPending(
       }),
     }));
 
-    const uids = await options.submitter.submit(requests);
+    let uids: string[];
+    try {
+      uids = await options.submitter.submit(requests);
+    } catch (error) {
+      // A batch is refused as a whole or not at all, and the commonest reason
+      // is its size: gas scales with the payload, a URL is most of the
+      // payload, and a corpus of long documentation paths makes a batch that
+      // `eth_estimateGas` will not price. That fails with no revert reason, so
+      // it reads as a broken node rather than as too much work in one call.
+      // Halving costs one wasted estimate and gets the run moving again; a
+      // batch of one that still fails is a real error and is raised.
+      if (requests.length > 1) {
+        size = Math.floor(requests.length / 2);
+        continue;
+      }
+      throw error;
+    }
     if (uids.length !== requests.length) {
       throw new Error(`expected ${requests.length} attestation UIDs, got ${uids.length}`);
     }
@@ -134,6 +164,7 @@ export async function attestPending(
     }
     attested += requests.length;
     batches += 1;
+    start += requests.length;
     options.onBatch?.({ attested, total: pending.length, batches });
   }
 
