@@ -12,7 +12,7 @@ machine that can reach the `mb-hel` cluster; see [MANUAL-DEPLOY.md](MANUAL-DEPLO
 | [wuzzy-api-stage.hcl](wuzzy-api-stage.hcl) | service | `meta.env=store` | The same, at `api-stage.wuzzy.io`. |
 | [wuzzy-frontend-static-live.hcl](wuzzy-frontend-static-live.hcl) | batch | `meta.env=edge-worker` | Builds the site and pushes it to Cloudflare Pages. |
 | [wuzzy-frontend-static-stage.hcl](wuzzy-frontend-static-stage.hcl) | batch | `meta.env=edge-worker` | The same, to `stage.wuzzy.io`. |
-| [wuzzy-admin.hcl](wuzzy-admin.hcl) | service | `meta.env=store` | Operations view on an internal hostname, with its own backend. |
+| [wuzzy-admin.hcl](wuzzy-admin.hcl) | service | `meta.env=store` | Operations view, private network only, with its own backend. |
 | [wuzzy-redis.hcl](wuzzy-redis.hcl) | service | `meta.env=store` | Broker for the crawl and attest queues. No persistence, by design. |
 | [wuzzy-worker.hcl](wuzzy-worker.hcl) | service | `meta.env=store` | Crawls and embeds what was paid for. Scale with `count`. |
 | [wuzzy-attester.hcl](wuzzy-attester.hcl) | service | `meta.env=store` | Writes the receipts. Holds the funded key. **Exactly one.** |
@@ -67,8 +67,12 @@ same-origin requests. Pages has no nginx. The free search box therefore calls
 `api.wuzzy.io` cross-origin, which is why the job sets `WEB_SEARCH_URL` and why the API sets
 `WEB_SEARCH_ORIGINS=https://wuzzy.io`. Those two have to agree or the box fails CORS.
 
-**The admin app is the exception and stays off Cloudflare.** It runs as an internal Nomad
-service on `wuzzy-admin.hel.memeticblock.net`. Publishing it to Pages would make it public and
+**The admin app is the exception and stays off Cloudflare, and off Traefik.** It has no public
+route: its port binds to the private network the way the database and the broker do, and
+`nomad service info wuzzy-admin` gives the address to open. An earlier version routed
+`wuzzy-admin.hel.memeticblock.net` through the public entrypoint and called the name internal.
+That name resolves to the edge from anywhere, and requesting a certificate for it publishes it
+in Certificate Transparency logs, so it was neither private nor obscure. Publishing it to Pages would make it public and
 reduce the access decision to a Cloudflare Access rule, which is a control that can be turned
 off by mistake; a hostname that does not resolve outside the network cannot be. It carries its
 own backend instance, because the public API runs `ADMIN_ENABLED=false` and must keep doing so.
@@ -120,7 +124,7 @@ Cloudflare (they are Pages, proxied). Everything else here is a subdomain of it.
 | `stage.wuzzy.io` | Pages project `wuzzy-site-stage` | proxied | yes |
 | `api.wuzzy.io` | Traefik on `mb-hel` | proxied | **no, create it** |
 | `api-stage.wuzzy.io` | Traefik on `mb-hel` | proxied | **no, create it** |
-| `wuzzy-admin.hel.memeticblock.net` | Traefik, internal only | n/a | **no, create it** |
+| ~~`wuzzy-admin.hel.memeticblock.net`~~ | nothing. Admin has no public route | n/a | **do not create** |
 
 **The proxy setting and `WEB_SEARCH_PROXY_HOPS` are one decision, not two.** Proxied, the chain
 is client to Cloudflare to Traefik, so the client address is the second entry from the right of
@@ -135,10 +139,13 @@ catches it.
 Both API records are POST-only in practice, and Cloudflare does not cache POST, so proxying
 them does not risk serving a paid result to an unpaid request.
 
-### The admin hostname is a deliberate exception
+### Admin has no hostname, deliberately
 
-It is the one name not under `wuzzy.io`. The invariant is that the admin surface stays off the
-public internet, and an internal-only name cannot be reached from outside at all.
+The invariant is that the admin surface stays off the public internet, and a hostname does not
+provide that. `wuzzy-admin.hel.memeticblock.net` already resolves to the edge, so routing it
+through the public Traefik entrypoint published the operations view to anyone who sent that Host
+header, and a certificate request would have listed the name in Certificate Transparency logs.
+It has no route now; reach it over the private network.
 
 `admin.wuzzy.io` is available if you prefer the domain to be consistent, but only as a
 **DNS-only** record to a private address: it would then resolve publicly while remaining

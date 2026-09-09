@@ -9,8 +9,13 @@
 # is the invariant: the admin surface has its own origin and image so it can be
 # kept off the public internet. Putting it on Pages would make it public and
 # leave the access decision to a Cloudflare Access rule, which is a control
-# somebody can turn off by mistake. An internal hostname cannot be reached from
-# outside the network at all.
+# somebody can turn off by mistake.
+#
+# A hostname is not that control either, which this file learned the hard way:
+# it used to route wuzzy-admin.hel.memeticblock.net through the public Traefik
+# entrypoint and describe the name as internal. It resolves to the edge from
+# anywhere. So there is no public route at all now, and the port binds to the
+# private network the way the database and the broker do.
 #
 # It carries its own backend, because the public API runs ADMIN_ENABLED=false
 # and must keep doing so. That second instance is the only process in the
@@ -33,8 +38,13 @@ job "wuzzy-admin" {
 
     network {
       mode = "bridge"
+      # On the private network only, the same way wuzzy-db and wuzzy-redis are.
+      # This is what "off the public internet" is made of: there is no route in
+      # from outside, rather than a rule saying requests from outside are
+      # refused.
       port "http" {
-        to = 80
+        to           = 80
+        host_network = "wireguard"
       }
       port "api" {
         to = 3000
@@ -99,15 +109,17 @@ job "wuzzy-admin" {
         name = "wuzzy-admin"
         port = "http"
 
-        # Internal hostname. Traefik still terminates TLS, but this name does
-        # not resolve outside the network.
-        tags = [
-          "traefik.enable=true",
-          "traefik.http.routers.wuzzy-admin.entrypoints=https",
-          "traefik.http.routers.wuzzy-admin.tls=true",
-          "traefik.http.routers.wuzzy-admin.tls.certresolver=memetic-block",
-          "traefik.http.routers.wuzzy-admin.rule=Host(`wuzzy-admin.hel.memeticblock.net`)",
-        ]
+        # No Traefik. An earlier version of this file routed
+        # wuzzy-admin.hel.memeticblock.net through the public entrypoint and
+        # called the name internal; it resolves to the edge from anywhere, and
+        # asking Let's Encrypt for a certificate publishes it in Certificate
+        # Transparency logs, so it was neither private nor obscure. Reach this
+        # over the private network instead:
+        #
+        #   nomad service info wuzzy-admin      # the address to open
+        #
+        # If it ever needs a hostname, it needs its own entrypoint bound to the
+        # private interface, not a Host rule on the public one.
 
         check {
           name     = "wuzzy-admin-tcp-check"
