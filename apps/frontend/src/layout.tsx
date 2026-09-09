@@ -62,7 +62,7 @@ const Header = () => (
     </a>
     <nav class="text-note flex gap-[18px] pb-0.5">
       {HEADER_LINKS.map((link) => (
-        <a href={link.href}>{link.label}</a>
+        <NavLink href={link.href} label={link.label} />
       ))}
     </nav>
   </header>
@@ -74,6 +74,23 @@ const Header = () => (
  * them, and putting them in the bar spends the most valuable row on the page
  * on the two links nobody arrives wanting.
  */
+/**
+ * A link in the header or the footer.
+ *
+ * Leaving the site opens a tab rather than replacing the one the reader is
+ * using, and that is decided by the href rather than by a flag on each link, so
+ * a link added later cannot be added wrong. `mailto:` is left alone: handing it
+ * to a new tab opens a blank window next to the mail client.
+ */
+const NavLink = ({ href, label }: { href: string; label: string }) =>
+  /^https?:/.test(href) ? (
+    <a href={href} target="_blank" rel="noopener noreferrer">
+      {label}
+    </a>
+  ) : (
+    <a href={href}>{label}</a>
+  );
+
 const HEADER_LINKS = [
   { href: '/about', label: 'About' },
   { href: '/roadmap', label: 'Roadmap' },
@@ -92,13 +109,10 @@ const Footer = () => (
   <footer class="border-ink text-note text-ink-muted mt-auto flex flex-wrap items-center gap-[18px] border-t-[1.5px] pt-4 pb-10">
     <img src="/brand/wuzzy-mark.png" alt="" width="20" height="20" class="block size-5 opacity-75" />
     <span>
-      Built by{' '}
-      <a href={site.operator.href} rel="noopener noreferrer">
-        {site.operator.name}
-      </a>
+      Built by <NavLink href={site.operator.href} label={site.operator.name} />
     </span>
     {FOOTER_LINKS.map((link) => (
-      <a href={link.href}>{link.label}</a>
+      <NavLink href={link.href} label={link.label} />
     ))}
   </footer>
 );
