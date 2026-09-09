@@ -187,9 +187,11 @@ read the caps in the spec as a spend ceiling:
     curl -s -X POST https://mainnet.base.org -H 'content-type: application/json' \
       -d '{"jsonrpc":"2.0","id":1,"method":"eth_getBalance","params":["<attester>","latest"]}'
 
-Half a cent per page at the gas measured on 2026-09-09, so the spec's `--max=1500` is about
-7.50 USD. An attester that runs dry does not lose the work: the receipts are owed by the
-database, the sweeper re-asks every minute, and funding it is what completes them.
+Half a cent per page at the gas measured on 2026-09-09. A full pass over the four seeds that
+publish sitemaps is 3,761 pages, about 19 USD; the spec's `--max` sits above that as a circuit
+breaker against a link-followed host with an unbounded URL space, not as a budget. An attester
+that runs dry does not lose the work: the receipts are owed by the database, the sweeper re-asks
+every minute, and funding it is what completes them.
 
 Re-running is safe. The crawler skips what a sitemap reports unchanged and anything fetched
 inside `CRAWL_MAX_AGE_DAYS`, so a second submission fetches only what is new or stale, and the

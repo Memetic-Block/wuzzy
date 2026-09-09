@@ -27,14 +27,21 @@
 #
 #   Measured on Base on 2026-09-09, tx 0xe7a9adca...b61c: 334,381 gas at
 #   0.006 gwei plus an L1 fee of 0.0000000015 ETH, so 0.0000020 ETH per
-#   attestation, half a cent at 2,493 USD. The caps below bound the run at
-#   1,500 pages, about 7.50 USD, which fits inside the 0.00398 ETH the attester
-#   holds without topping it up. Raise them and fund it first, or the attester
-#   runs out mid-corpus and retries every minute until it is funded.
+#   attestation, half a cent at 2,493 USD. The four seeds that publish sitemaps
+#   list 3,761 URLs between them, so a full pass is about 19 USD.
 #
-# The per-host cap is what spreads the budget. docs.cdp.coinbase.com alone lists
-# 2,357 sitemap URLs and would otherwise consume the whole run before the
-# crawler reached the fifth seed.
+# `--max` is a circuit breaker rather than a budget, which is why it sits well
+# above that figure. Three of the seven seeds publish no sitemap and are reached
+# by following links instead, and a link-followed host can expose an unbounded
+# URL space through pagination or a calendar. Scope is the exact host, so the
+# damage is capped at one site either way, but a run that stops at a number
+# somebody chose is easier to read than one that stops when a quota runs out.
+#
+# There is deliberately no `--per-host` cap. It would truncate whichever host
+# the crawler reaches with the budget already spent, and truncating a corpus by
+# sitemap order drops pages for a reason that has nothing to do with what they
+# say. docs.cdp.coinbase.com is 2,357 of those URLs, the x402 reference among
+# them, and a partial copy of it is worse than a complete one is skewed.
 job "wuzzy-seed" {
   datacenters = ["mb-hel"]
   type        = "batch"
@@ -71,7 +78,7 @@ job "wuzzy-seed" {
         image      = "ghcr.io/memetic-block/wuzzy-backend:sha-b13567c0482148c34cfeda3bebfd42bd5febd8cf"
         entrypoint = ["/bin/sh", "-c"]
         args = [
-          "set -e; bun apps/backend/src/cli/wuzzy.ts crawl --per-host=250 --max=1500; bun apps/backend/src/cli/wuzzy.ts embed",
+          "set -e; bun apps/backend/src/cli/wuzzy.ts crawl --max=6000; bun apps/backend/src/cli/wuzzy.ts embed",
         ]
       }
 
@@ -98,8 +105,8 @@ job "wuzzy-seed" {
         POSTGRES_PORT={{ .Port }}
         {{- end }}
         {{- with secret "kv/wuzzy/api" }}
-        POSTGRES_PASSWORD={{ .Data.data.POSTGRES_PASSWORD | required "POSTGRES_PASSWORD missing from kv/wuzzy/api" }}
-        EMBEDDING_API_KEY={{ .Data.data.EMBEDDING_API_KEY | required "EMBEDDING_API_KEY missing from kv/wuzzy/api" }}
+        POSTGRES_PASSWORD="{{ .Data.data.POSTGRES_PASSWORD }}"
+        EMBEDDING_API_KEY="{{ .Data.data.EMBEDDING_API_KEY }}"
         {{- end }}
         EOT
         destination = "secrets/seed.env"
