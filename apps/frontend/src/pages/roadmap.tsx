@@ -42,7 +42,7 @@ export default () => {
         </>
       ),
     },
-    { title: 'Demonstrated in v1', body: <FirstVersion /> },
+    { title: 'Demonstrated in v0', body: <FirstVersion /> },
   ];
   const shown = sections.filter((section): section is RoadmapSection => section !== null);
 
@@ -119,6 +119,6 @@ const FirstVersion = () => (
     ) : (
       'vision on record'
     )}
-    . The current build is its rebuild on production-grade rails.
+    . Wuzzy v1 is its rebuild on production-grade rails.
   </p>
 );
