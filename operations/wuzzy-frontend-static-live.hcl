@@ -69,6 +69,11 @@ job "wuzzy-frontend-static-live" {
         # paid the gas. Any settled query qualifies; this is the first.
         SETTLED_QUERY_URL = "https://basescan.org/tx/0x7c100de17628ee8b3924cad1501defb1c1c56a198124bdf51bdc890638c7c2cf"
 
+        # One commissioned index, paid for: 0.18 USDC, which is nine pages at
+        # the posted rate. What makes "pay to index sources you choose" a live
+        # claim rather than a promise.
+        SETTLED_COMMISSION_URL = "https://basescan.org/tx/0x4ff056546b8511736dec097b9cec26f54a4d53a80af1ad62c7f21e3f7b4cf6d4"
+
         # Commissioning is reachable in production, so the Act 2 heading drops
         # its SHIPPING THIS WEEK badge. Set the day the flow went live, which is
         # the only thing that should ever remove that promise.
