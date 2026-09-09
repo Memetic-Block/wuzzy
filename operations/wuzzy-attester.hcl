@@ -77,13 +77,6 @@ job "wuzzy-attester" {
         {{- end }}
         {{- with secret "kv/wuzzy/attester" }}
         ATTESTER_PRIVATE_KEY={{ .Data.data.ATTESTER_PRIVATE_KEY }}
-        {{- /* A dedicated Base endpoint. Without it the attester falls back to
-               the public https://mainnet.base.org, which rate-limits per IP and
-               is not a thing to write thousands of transactions through: it
-               throttles the cluster, ethers waits on a receipt that never
-               arrives, and the run stops without an error. Any provider works;
-               the CDP node you already hold keys for is one. */}}
-        BASE_RPC_URL={{ .Data.data.BASE_RPC_URL }}
         {{- end }}
         EOT
         destination = "secrets/attester.env"

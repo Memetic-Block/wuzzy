@@ -156,6 +156,24 @@ export class MissingAttesterKeyError extends Error {}
  * time and is never defaulted: an attester key belongs to a human running this
  * by hand, not to this repository, a session, or CI.
  */
+/**
+ * An environment value, or nothing, for config that arrives through Vault.
+ *
+ * A Nomad template renders a key the secret store does not have as the literal
+ * string `<no value>` rather than failing or leaving the variable unset. With
+ * `??` that beats a default, because it is neither null nor undefined, so a
+ * spec naming a key nobody created silently reconfigures the process. It cost
+ * an hour on 2026-09-09: `BASE_RPC_URL` rendered as `<no value>` and ethers
+ * reported `unsupported protocol <no value>`, which reads like a broken node
+ * rather than a template naming a key that was never set.
+ *
+ * Absent, empty and `<no value>` all mean the same thing: not configured.
+ */
+export function configured(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return !trimmed || trimmed === '<no value>' ? undefined : trimmed;
+}
+
 export function createEasSubmitter(
   options?: Partial<EasSubmitterOptions>,
   env: Record<string, string | undefined> = process.env,
@@ -165,8 +183,8 @@ export function createEasSubmitter(
   // EAS_CHAIN picks the network; BASE_RPC_URL overrides only the endpoint, so
   // pointing at a private node cannot quietly move which chain is attested to.
   const chain = chainSettings(env);
-  const rpcUrl = options?.rpcUrl ?? env.BASE_RPC_URL ?? chain.rpcUrl;
-  const easAddress = options?.easAddress ?? env.EAS_ADDRESS ?? EAS_ADDRESS;
+  const rpcUrl = options?.rpcUrl || configured(env.BASE_RPC_URL) || chain.rpcUrl;
+  const easAddress = options?.easAddress || configured(env.EAS_ADDRESS) || EAS_ADDRESS;
 
   if (!schemaUid) throw new MissingAttesterKeyError('EAS_SCHEMA_UID is not set');
   if (!privateKey) {
