@@ -51,7 +51,7 @@ job "wuzzy-attest" {
       driver = "docker"
 
       config {
-        image      = "ghcr.io/memetic-block/wuzzy-backend:sha-4fc0f219a070056f417f1e8089028ed4fcb5ca5f"
+        image      = "ghcr.io/memetic-block/wuzzy-backend:sha-2b8a92fd8c1931dc10f0622772345c2ac3b4845d"
         entrypoint = ["/bin/sh", "-c"]
         args       = ["bun apps/backend/src/cli/wuzzy.ts attest"]
       }
