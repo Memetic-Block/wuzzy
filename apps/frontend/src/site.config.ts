@@ -263,6 +263,11 @@ const RECEIPT_HREFS = {
   source: site.repo,
   verify: `${site.repo}/blob/master/VERIFY.md`,
   bazaar: env.BAZAAR_URL || null,
+  settledCommission: env.SETTLED_COMMISSION_URL || null,
+  // The free window's proof is the working box on this site. It is live
+  // exactly when the site renders one, which is the same switch, so the claim
+  // and the thing claimed cannot disagree.
+  freeSearch: env.SEARCH_ENABLED === 'true' ? '/' : null,
 } as const;
 
 /**
@@ -335,6 +340,16 @@ const ROADMAP_CLAIMED: readonly RoadmapItem[] = [
     receipt: { label: 'a settled query on Basescan', href: RECEIPT_HREFS.settledQuery },
   },
   {
+    name: 'Commissioned indexes',
+    summary: 'pay to index sources you choose; public or private, one-shot or growing.',
+    receipt: { label: 'a settled commission on Basescan', href: RECEIPT_HREFS.settledCommission },
+  },
+  {
+    name: 'Free public search window',
+    summary: 'rate-limited human access to index #1.',
+    receipt: { label: 'the search box on this site', href: RECEIPT_HREFS.freeSearch },
+  },
+  {
     name: 'Open source',
     summary: 'the whole pipeline, contracts-first.',
     receipt: { label: 'GitHub', href: RECEIPT_HREFS.source },
@@ -344,12 +359,19 @@ const ROADMAP_CLAIMED: readonly RoadmapItem[] = [
 /** Work that has no receipt to give yet, and is not claiming otherwise. */
 const ROADMAP_BUILDING: readonly RoadmapItem[] = [
   {
-    name: 'Commissioned indexes',
-    summary: 'pay to index sources you choose; public or private, one-shot or growing.',
-    },
+    name: 'Crawl discovery',
+    summary:
+      'commissioned crawls that follow a site instead of only the URLs named, inside the budget that was paid for.',
+  },
   {
-    name: 'Free public search window',
-    summary: 'rate-limited human access to index #1.',
+    name: 'Verified parsing on HyperBEAM',
+    summary:
+      'the canonicalization step run as verifiable compute, so the hash behind a receipt can be recomputed by anyone rather than taken on our word.',
+  },
+  {
+    name: 'Permanent indexes',
+    summary:
+      'indexes are ephemeral today; permanent ones keep their pages on Arweave, so a receipt stays openable after the crawl that made it is gone.',
   },
 ];
 
@@ -374,11 +396,6 @@ export const roadmapBuilding: readonly RoadmapItem[] = [
  * word that implies a date.
  */
 export const ROADMAP_NEXT: readonly RoadmapItem[] = [
-  {
-    name: 'Verifiable compute',
-    summary:
-      'the canonicalization step as a pinned, replayable artifact on decentralized compute: verify the computation, not just the commitment.',
-  },
   {
     name: 'Multi-vantage crawling',
     summary:

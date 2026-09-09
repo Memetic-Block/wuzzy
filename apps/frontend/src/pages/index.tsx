@@ -182,8 +182,8 @@ const Commission = () => (
     </div>
     <p class="text-ink-body m-0 max-w-[60ch]" style="line-height:1.6">
       Point Wuzzy at any sources. We crawl them honestly &mdash; robots respected, posted prices
-      paid or skipped, never evaded &mdash; and attest every page on Base. Queryable in about an
-      hour. No account, no API key: a wallet is enough.
+      paid or skipped, never evaded &mdash; and attest every page on Base. Queryable in minutes.
+      No account, no API key: a wallet is enough.
     </p>
 
     <ol class="border-rule mt-7 mb-0 grid list-none border-t p-0">

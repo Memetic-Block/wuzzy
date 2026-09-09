@@ -419,7 +419,7 @@ describe('about page', () => {
 
   it('carries no date, so nothing on it can go stale', async () => {
     const flat = textOf(await read('about.html'));
-    // The v1 story is dated in words ("well before the current build"), which
+    // The v0 story is dated in words ("well before the current build"), which
     // stays true without maintenance. A year or a month here would not.
     expect(flat).not.toMatch(/\b(?:19|20)\d{2}\b/);
     expect(flat).not.toMatch(
@@ -504,18 +504,20 @@ describe('roadmap page', () => {
       'Live now',
       'In build',
       'Next: deeper receipts',
-      'Demonstrated in v1',
+      'Demonstrated in v0',
       'Every phase makes the receipts harder to argue with.',
       'Honest crawling — WuzzyBot, robots respected, posted prices honored.',
       'Open source — the whole pipeline, contracts-first.',
       'Commissioned indexes — pay to index sources you choose; public or private, one-shot or growing.',
       'Free public search window — rate-limited human access to index #1.',
-      'Verifiable compute — the canonicalization step as a pinned, replayable artifact on decentralized compute: verify the computation, not just the commitment.',
+      'Crawl discovery — commissioned crawls that follow a site instead of only the URLs named, inside the budget that was paid for.',
+      'Verified parsing on HyperBEAM — the canonicalization step run as verifiable compute, so the hash behind a receipt can be recomputed by anyone rather than taken on our word.',
+      'Permanent indexes — indexes are ephemeral today; permanent ones keep their pages on Arweave, so a receipt stays openable after the crawl that made it is gone.',
       'Multi-vantage crawling — the same page fetched over independent network paths and cross-checked, making cloaking detectable and origin claims quorum-backed.',
       'Permanent evidence — fetched content archived to permanent storage so every commitment stays openable in disputes, forever.',
       'Index maturation — owner-set pricing, richer access policies, indexes that serve their own catalogs.',
       'The autonomous version of this system already ran: crawler processes living onchain',
-      'The current build is its rebuild on production-grade rails.',
+      'Wuzzy v1 is its rebuild on production-grade rails.',
     ]) {
       expect(flat).toContain(line);
     }
@@ -552,6 +554,8 @@ describe('roadmap page', () => {
         ...process.env,
         EAS_SCHEMA_URL: 'https://base.easscan.org/schema/view/0xabc',
         SETTLED_QUERY_URL: 'https://basescan.org/tx/0xdef',
+        SETTLED_COMMISSION_URL: 'https://basescan.org/tx/0x123',
+        SEARCH_ENABLED: 'true',
       },
       stdout: 'pipe',
       stderr: 'pipe',
@@ -564,11 +568,15 @@ describe('roadmap page', () => {
       'Honest crawling',
       'Attested fetches',
       'Metered search',
-      'Open source',
-    ]);
-    expect(sectionItems(after, 'IN BUILD')).toEqual([
       'Commissioned indexes',
       'Free public search window',
+      'Open source',
+    ]);
+    // What is left is work that has never claimed a receipt.
+    expect(sectionItems(after, 'IN BUILD')).toEqual([
+      'Crawl discovery',
+      'Verified parsing on HyperBEAM',
+      'Permanent indexes',
     ]);
     expect(after).toContain('https://base.easscan.org/schema/view/0xabc');
   });
@@ -585,7 +593,7 @@ describe('roadmap page', () => {
     );
 
     // No section renders as a heading over nothing. Not every section is a
-    // list — the v1 one is prose — so the check is that something followed the
+    // list — the v0 one is prose — so the check is that something followed the
     // heading, not that a particular shape did.
     for (const section of roadmap.match(/<section[\s\S]*?<\/section>/g) ?? []) {
       const afterHeading = section.slice(section.indexOf('</h2>') + 5);
