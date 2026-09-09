@@ -42,7 +42,7 @@ job "wuzzy-worker" {
       driver = "docker"
 
       config {
-        image      = "ghcr.io/memetic-block/wuzzy-backend:sha-24aa7209b07167309ee2b412ba1e335cfb344c2a"
+        image      = "ghcr.io/memetic-block/wuzzy-backend:sha-4fc0f219a070056f417f1e8089028ed4fcb5ca5f"
         entrypoint = ["/bin/sh", "-c"]
         args       = ["bun apps/backend/src/worker.ts"]
       }
