@@ -195,6 +195,17 @@ export const site = {
 
   repo: 'https://github.com/Memetic-Block/wuzzy',
   operator: { name: 'Memetic Block', href: 'https://memeticblock.com' },
+
+  /**
+   * The chains the footer names. Here rather than in the markup because each
+   * one is a claim about where this deployment actually writes, and a claim
+   * that stops being true should be removed by editing a list, not by hunting
+   * through a layout.
+   */
+  builtOn: [
+    { name: 'Base', href: 'https://base.org' },
+    { name: 'Arweave', href: 'https://arweave.org' },
+  ],
   social: { label: 'x.com/wuzzysearch', href: 'https://x.com/wuzzysearch' },
 } as const;
 

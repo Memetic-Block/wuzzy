@@ -1,4 +1,4 @@
-import { h, type Children } from '@wuzzy/static-site';
+import { Fragment, h, type Children } from '@wuzzy/static-site';
 import { site } from './site.config';
 
 /**
@@ -110,6 +110,15 @@ const Footer = () => (
     <img src="/brand/wuzzy-mark.png" alt="" width="20" height="20" class="block size-5 opacity-75" />
     <span>
       Built by <NavLink href={site.operator.href} label={site.operator.name} />
+    </span>
+    <span>
+      Built on{' '}
+      {site.builtOn.map((chain, position) => (
+        <>
+          {position > 0 ? ' and ' : ''}
+          <NavLink href={chain.href} label={chain.name} />
+        </>
+      ))}
     </span>
     {FOOTER_LINKS.map((link) => (
       <NavLink href={link.href} label={link.label} />

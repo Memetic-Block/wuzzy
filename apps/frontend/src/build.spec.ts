@@ -662,10 +662,16 @@ describe('legal pages', () => {
     // The pages were carried over from a site that resolved ArNS names and
     // queried Goldsky over GraphQL. None of that exists here, so a mention of
     // it is a claim about a service that is not running.
+    //
+    // Scoped to what the documents themselves say. The header and footer are
+    // shared chrome carrying the site's own claims, and an undertaking in a
+    // privacy policy is a different kind of statement from a link in a footer.
     const forbidden = /arns|goldsky|graphql|arweave|opensearch|permaweb/i;
     for (const page of ['privacy.html', 'terms.html']) {
       const html = await read(page);
-      const found = html.match(forbidden);
+      const document = html.match(/<main[^>]*>([\s\S]*?)<\/main>/)?.[1];
+      expect(document).toBeTruthy();
+      const found = document!.match(forbidden);
       expect(found?.[0] ?? null).toBeNull();
     }
   });
