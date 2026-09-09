@@ -247,15 +247,19 @@ describe('homepage', () => {
   it('takes every external link from site.config', async () => {
     const index = await read('index.html');
 
-    for (const receipt of receipts) {
+    for (const receipt of receipts.filter((entry) => entry.href)) {
       expect(index).toContain(receipt.note);
-      if (receipt.href) expect(index).toContain(receipt.href);
+      expect(index).toContain(receipt.href!);
     }
 
-    // A receipt that has not been published yet says so, instead of rendering
-    // a link that goes nowhere.
-    const pending = receipts.filter((receipt) => receipt.href === null);
-    if (pending.length > 0) expect(index).toContain('published at cutover');
+    // A receipt with nowhere to point is absent rather than rendered as a
+    // promise: this row is the page's evidence, and an entry a reviewer cannot
+    // click costs more than the missing item was worth. Setting its URL in the
+    // configuration brings it back with no markup change.
+    for (const pending of receipts.filter((entry) => !entry.href)) {
+      expect(index).not.toContain(pending.note);
+    }
+    expect(index).not.toContain('published at cutover');
 
     expect(index).toContain(site.repo);
     expect(index).toContain(site.apiOrigin);
@@ -860,6 +864,7 @@ describe('free search box', () => {
       'RESULTS \u00b7 INDEX #1',
       'NO MATCHES \u00b7 INDEX #1',
       'FREE WINDOW EXHAUSTED',
+      'INDEX #1 \u00b7 BEING COMMISSIONED',
     ]) {
       expect(source).toContain(caption);
     }
@@ -1025,13 +1030,18 @@ describe('free search box', () => {
       },
     });
 
-    const attempt = async (status: number, act: 'load' | 'click' | 'submit') => {
+    const attempt = async (
+      status: number,
+      act: 'load' | 'click' | 'submit',
+      results: unknown[] = [],
+    ) => {
       const nodes: Record<string, ReturnType<typeof el>> = {
         'search-form': el({ 'data-endpoint': '/x', 'data-samples': 'a|b|c|d' }),
         query: el(),
         'ledger-caption': el(),
         ledger: el(),
         'ledger-refresh': el(),
+        'ledger-live': el(),
       };
       let code = act === 'load' ? status : 200;
       const location = { href: 'https://wuzzy.io/' };
@@ -1045,7 +1055,12 @@ describe('free search box', () => {
         fetch: () =>
           Promise.resolve({
             status: code,
-            json: () => Promise.resolve({ results: [], total: 0, error: 'rate limit exceeded' }),
+            json: () =>
+              Promise.resolve({
+                results,
+                total: results.length,
+                error: 'rate limit exceeded',
+              }),
           }),
       };
       new Function(...Object.keys(context), source)(...Object.values(context));
@@ -1058,7 +1073,11 @@ describe('free search box', () => {
         for (const fn of nodes['search-form']!.handlers.submit ?? []) fn({ preventDefault() {} });
       }
       await Bun.sleep(12);
-      return { caption: nodes['ledger-caption']!.textContent, ledger: nodes.ledger!.innerHTML };
+      return {
+        caption: nodes['ledger-caption']!.textContent,
+        ledger: nodes.ledger!.innerHTML,
+        badgeHidden: nodes['ledger-live']!.hidden,
+      };
     };
 
     // Every route to a rate limit says so, the opening sample included: it is a
@@ -1074,6 +1093,23 @@ describe('free search box', () => {
     // our own outage. That silence is deliberate and stays.
     const broken = await attempt(500, 'load');
     expect(broken.caption).toContain('SAMPLE RESULTS');
+    // But it may not call itself LIVE over an empty box either.
+    expect(broken.badgeHidden).toBe(true);
+
+    // An index with nothing in it yet is not a search that found nothing. It
+    // says what is actually happening, and the case does not claim to be LIVE
+    // until there is a result in it to look at.
+    const unpopulated = await attempt(200, 'load');
+    expect(unpopulated.caption).toBe('INDEX #1 \u00b7 BEING COMMISSIONED');
+    expect(unpopulated.ledger).toContain('being commissioned');
+    expect(unpopulated.badgeHidden).toBe(true);
+
+    // And it does claim LIVE the moment there is a real entry, from the same
+    // condition rather than a flag that could be left set over an empty case.
+    const populated = await attempt(200, 'load', [
+      { url: 'https://docs.base.org/', title: 'Base', snippet: 'x', provenance: {} },
+    ]);
+    expect(populated.badgeHidden).toBe(false);
     expect(broken.ledger).toBe('');
   });
 

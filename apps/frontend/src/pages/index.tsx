@@ -89,7 +89,13 @@ const SpecimenCase = () => (
     >
       <div class="bg-ink text-paper text-marker tracking-marker flex justify-between gap-3 px-[14px] py-[7px]">
         <span>SPECIMEN CASE &middot; INDEX #1</span>
-        <span class="text-accent-bright">LIVE</span>
+        {/* Revealed by search.js only once the ledger holds at least one real
+            entry. An empty case under a LIVE badge is the page claiming
+            evidence it does not have, which is the one failure this whole
+            design argues against. */}
+        <span id="ledger-live" class="text-accent-bright" hidden>
+          LIVE
+        </span>
       </div>
 
       <form
@@ -264,7 +270,7 @@ const Proof = () => (
     </div>
 
     <div class="mt-8 flex flex-wrap gap-2">
-      {receipts.map((receipt) => (
+      {receipts.filter((receipt) => receipt.href).map((receipt) => (
         <ReceiptChip receipt={receipt} />
       ))}
     </div>
@@ -272,25 +278,22 @@ const Proof = () => (
 );
 
 /**
- * A receipt with nowhere to point is rendered as a stated absence rather than
- * dropped, because the row is a list of what a reviewer may check and a
- * quietly missing entry is the one thing that would make it dishonest.
+ * Only receipts that resolve are shown.
+ *
+ * This row is the page's evidence, and an entry a reviewer cannot click is a
+ * promise sitting among proofs, which costs more credibility than the missing
+ * item was worth. An absence is still stated, just not here: the roadmap is
+ * where something not yet published is named, with the receipt that will prove
+ * it. Setting the URL in the configuration brings the entry back with no markup
+ * change, which is what makes dropping it safe rather than a deletion.
  */
-const ReceiptChip = ({ receipt }: { receipt: (typeof receipts)[number] }) =>
-  receipt.href ? (
-    <a
-      href={receipt.href}
-      title={receipt.note}
-      rel="noopener noreferrer"
-      class="border-rule-strong bg-paper-raised text-note text-ink-body hover:border-accent hover:text-accent border px-3 py-2 no-underline"
-    >
-      {receipt.label}
-    </a>
-  ) : (
-    <span
-      title={receipt.note}
-      class="border-rule-strong bg-paper-raised text-note text-ink-muted border border-dashed px-3 py-2"
-    >
-      {receipt.label} <span class="text-ink-faint">(published at cutover)</span>
-    </span>
+const ReceiptChip = ({ receipt }: { receipt: (typeof receipts)[number] }) => (
+  <a
+    href={receipt.href ?? undefined}
+    title={receipt.note}
+    rel="noopener noreferrer"
+    class="border-rule-strong bg-paper-raised text-note text-ink-body hover:border-accent hover:text-accent border px-3 py-2 no-underline"
+  >
+    {receipt.label}
+  </a>
   );

@@ -17,6 +17,7 @@
   var caption = document.getElementById('ledger-caption');
   var ledger = document.getElementById('ledger');
   var refresh = document.getElementById('ledger-refresh');
+  var badge = document.getElementById('ledger-live');
 
   if (!form || !input || !caption || !ledger) return;
 
@@ -35,7 +36,13 @@
     results: 'RESULTS · INDEX #1',
     empty: 'NO MATCHES · INDEX #1',
     limit: 'FREE WINDOW EXHAUSTED',
+    // An index with nothing in it yet is not a search that found nothing, and
+    // captioning it as a sample would advertise results that do not exist.
+    commissioning: 'INDEX #1 · BEING COMMISSIONED',
   };
+
+  var COMMISSIONING =
+    "Index #1 is being commissioned — sample results publish when it's live.";
 
   function escape(value) {
     return String(value == null ? '' : value).replace(/[&<>"']/g, function (c) {
@@ -132,10 +139,18 @@
     );
   }
 
-  function show(mode, html) {
+  /**
+   * Writes the ledger, and decides whether the case may call itself LIVE.
+   *
+   * `live` is passed only where real entries were rendered, so the badge and
+   * the contents cannot disagree: there is no separate flag that could be left
+   * true over an empty box.
+   */
+  function show(mode, html, live) {
     caption.textContent = CAPTIONS[mode];
     ledger.innerHTML = html;
     ledger.scrollTop = 0;
+    if (badge) badge.hidden = !live;
   }
 
   /**
@@ -212,7 +227,7 @@
         var items = out.body.results || [];
 
         if (items.length === 0) {
-          if (silent) return show('sample', '');
+          if (silent) return show('commissioning', notice(COMMISSIONING));
           return show(
             'empty',
             notice(
@@ -234,7 +249,7 @@
           html += tally(items.length, total, out.body.exhaustive === false ? '+' : '');
         }
 
-        show(isSample ? 'sample' : 'results', html);
+        show(isSample ? 'sample' : 'results', html, true);
       })
       .catch(function () {
         if (silent) return show('sample', '');
