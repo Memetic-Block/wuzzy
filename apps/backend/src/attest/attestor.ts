@@ -132,6 +132,8 @@ export interface EasSubmitterOptions {
   readonly privateKey: string;
   readonly rpcUrl: string;
   readonly easAddress?: string;
+  /** How long one batch may take before it is treated as lost. */
+  readonly timeoutMs?: number;
 }
 
 export class MissingAttesterKeyError extends Error {}
@@ -161,24 +163,72 @@ export function createEasSubmitter(
     );
   }
 
+  const timeoutMs = options?.timeoutMs ?? Number(env.ATTEST_SUBMIT_TIMEOUT_MS ?? DEFAULT_SUBMIT_TIMEOUT_MS);
+
   return {
     async submit(requests) {
       const provider = new ethers.JsonRpcProvider(rpcUrl);
       const eas = new EAS(easAddress);
       eas.connect(new ethers.Wallet(privateKey, provider));
 
-      const transaction = await eas.multiAttest([
-        {
-          schema: schemaUid,
-          data: requests.map((request) => ({
-            recipient: request.recipient,
-            expirationTime: NO_EXPIRATION,
-            revocable: true,
-            data: request.encodedData,
-          })),
-        },
-      ]);
-      return transaction.wait();
+      return withTimeout(
+        (async () => {
+          const transaction = await eas.multiAttest([
+            {
+              schema: schemaUid,
+              data: requests.map((request) => ({
+                recipient: request.recipient,
+                expirationTime: NO_EXPIRATION,
+                revocable: true,
+                data: request.encodedData,
+              })),
+            },
+          ]);
+          return transaction.wait();
+        })(),
+        timeoutMs,
+        `attestation batch of ${requests.length}`,
+      );
     },
   };
+}
+
+/**
+ * How long a batch may take before it is treated as lost.
+ *
+ * Generous on purpose: Base produces a block every two seconds, so a batch that
+ * has not settled in three minutes is not slow, it is gone.
+ */
+export const DEFAULT_SUBMIT_TIMEOUT_MS = 180_000;
+
+/**
+ * Fails a submission that never comes back.
+ *
+ * `transaction.wait()` waits for a receipt with no deadline of its own, so a
+ * provider that stops answering leaves the promise pending forever. That is
+ * worse than an error here: the attest job stays *active* rather than failing,
+ * and [queue/attest.sweeper.ts](../queue/attest.sweeper.ts) only clears jobs
+ * that finished, so every later re-ask is skipped and the whole corpus stops
+ * being attested in silence. Observed on 2026-09-09, where 2,476 receipts sat
+ * behind one call that never returned.
+ *
+ * Rejecting instead is safe and self-healing: the job fails, the failure is
+ * removed, the sweeper asks again, and the work queue is still
+ * `attestation_uid IS NULL`, so nothing already onchain is re-attested. The one
+ * cost is a batch whose transaction landed while the wait timed out, which is
+ * re-attested and paid for twice; at three minutes that is a rarity, and it is
+ * a far smaller bill than an attester that stops.
+ */
+export async function withTimeout<T>(work: Promise<T>, ms: number, what: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      work,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error(`${what} did not settle within ${ms}ms`)), ms);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
