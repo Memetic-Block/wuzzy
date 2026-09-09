@@ -39,7 +39,7 @@ job "wuzzy-pipeline" {
       driver = "docker"
 
       config {
-        image      = "ghcr.io/memetic-block/wuzzy-backend:sha-c218113cfe70644a48bbc430ec046dddf670851d"
+        image      = "ghcr.io/memetic-block/wuzzy-backend:sha-2274da008707046fda203889be571f488c4994d0"
         entrypoint = ["/bin/sh", "-c"]
         args = [
           "set -e; bun apps/backend/src/cli/wuzzy.ts crawl; bun apps/backend/src/cli/wuzzy.ts embed",
