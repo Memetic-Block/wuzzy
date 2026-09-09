@@ -33,10 +33,16 @@ tells you the price; paying it is the whole of the authentication story.
 
 ## Writing a client
 
-We do not ship a client that takes a private key as input, so write one. The shortest path is
-[`@x402/fetch`](https://www.npmjs.com/package/@x402/fetch), which wraps `fetch` so a 402 is
-paid and retried for you. Use the current major version rather than the older `x402-fetch`
-package.
+We do not ship a client that takes a private key as input, so write one. Either published
+package wraps `fetch` so a 402 is paid and retried for you:
+
+- [`@x402/fetch`](https://www.npmjs.com/package/@x402/fetch), the current scoped package
+- `x402-fetch`, the older unscoped one
+
+Read the 402 this API answers with before you choose, and note the version it declares. The two
+packages do not target the same protocol version and their APIs differ. Working that out is
+part of what we want to know: if you pick wrong, tell us what the failure looked like and how
+long it took to understand.
 
 If you would rather implement the handshake yourself, the 402 body carries everything you need
 and the docs describe it. Say which route you took.

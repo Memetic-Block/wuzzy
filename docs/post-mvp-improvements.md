@@ -67,3 +67,28 @@ demoing from that stack will be showing an index with `attestations: 0`.
 Either run an attester there against a local chain, or have the demo stack say plainly that
 receipts are the one part it stands in for. The fork rig in [scripts/fork/](../scripts/fork/) is
 the one that attests for real, and it should stay the thing we point at for proof.
+
+## Answer both x402 protocol versions
+
+The API answers `x402Version: 1`, because [payment.service.ts](../apps/backend/src/payment/payment.service.ts)
+is built on `x402@1.2.0`. The ecosystem has moved: the scoped `@x402/*` packages ship weekly and
+were on 2.25.0 in September 2026, while the unscoped v1 line has had no release since April, and
+on the packages people actually integrate with the scoped ones outnumber them roughly five to
+one.
+
+A v2 client can still pay us, which the mainnet dogfood proved rather than assumed: register the
+`V1` scheme from `@x402/evm/v1` with the v1 network name and `x402Version: 1`. That works, and
+it is now what the docs show. But it is a thing the integrator has to know, and nothing in a
+failed payment says "you built this for the wrong protocol version".
+
+**The destination is serving both, not migrating.** A resource server that answers only v2 turns
+away every v1 client still in the wild, and one that answers only v1 keeps costing every new
+integrator the same discovery. The 402 already carries a version, so answering both is a matter
+of offering v1 and v2 requirements and verifying whichever the payer signed. What makes it real
+work rather than a dependency bump is that v2 changes the wire: `X-PAYMENT` becomes a
+`PAYMENT-REQUIRED` / `PAYMENT-SIGNATURE` / `PAYMENT-RESPONSE` flow, and networks move to CAIP-2,
+so `base` becomes `eip155:8453`. That changes what the facilitator verifies, so it wants the
+fork rehearsal the original payment path got, not a confident afternoon.
+
+Worth doing before anyone builds on us in earnest. Until then the docs name the version, which
+is a signpost rather than a fix.
