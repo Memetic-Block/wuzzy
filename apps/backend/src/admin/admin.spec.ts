@@ -94,6 +94,28 @@ describe('admin config', () => {
     expect(buildAdminConfig({ ADMIN_ENABLED: '1' }).enabled).toBe(false);
     expect(buildAdminConfig({ ADMIN_ENABLED: 'true' }).enabled).toBe(true);
   });
+
+  it('takes the token from the environment', () => {
+    // The path a deployment actually uses. Every other test injects the token
+    // straight into the config, so until this existed nothing checked that the
+    // variable was read at all.
+    expect(buildAdminConfig({}).token).toBeNull();
+    expect(buildAdminConfig({ ADMIN_TOKEN: 'sekrit' }).token).toBe('sekrit');
+  });
+
+  it('trims a token that arrived through a template renderer', () => {
+    // Vault and Nomad both hand this over as text, and either can leave a
+    // newline on the end. Untrimmed, the deployed token never matches the one
+    // an operator copies out of Vault, and the only feedback is a constant-time
+    // "missing or wrong" that names nothing.
+    expect(buildAdminConfig({ ADMIN_TOKEN: 'sekrit\n' }).token).toBe('sekrit');
+    expect(buildAdminConfig({ ADMIN_TOKEN: '  sekrit  ' }).token).toBe('sekrit');
+
+    // Whitespace alone is not a token. Left as an empty string it would be
+    // falsy, which the guard reads as "no token configured" and lets everyone
+    // through; null says the same thing without depending on that coincidence.
+    expect(buildAdminConfig({ ADMIN_TOKEN: '   ' }).token).toBeNull();
+  });
 });
 
 describe('admin API', () => {
