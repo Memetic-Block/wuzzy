@@ -1098,3 +1098,53 @@ describe('free search box', () => {
     expect(index).not.toContain('data-endpoint="https://api.wuzzy.io/search"');
   });
 });
+
+describe('machine-readable discovery', () => {
+  it('publishes a sitemap and llms.txt for the pages it actually rendered', async () => {
+    await buildAll();
+
+    const sitemap = await read('sitemap.xml');
+    const llms = await read('llms.txt');
+    for (const path of ['/', '/about', '/privacy', '/roadmap', '/terms']) {
+      expect(sitemap).toContain(`<loc>${site.origin}${path}</loc>`);
+      expect(llms).toContain(`(${site.origin}${path})`);
+    }
+
+    // Extensionless, because Cloudflare Pages resolves /about to about.html
+    // and advertising the .html would publish a second URL for one page.
+    expect(sitemap).not.toContain('.html');
+    expect(llms).not.toContain('.html');
+  });
+
+  it('renders a 404 page and keeps it out of both', async () => {
+    await buildAll();
+
+    // Without this file Pages serves index.html with a 200 for every unknown
+    // path, so a typo and a real page look identical to anything reading a
+    // status code.
+    expect(await exists('404.html')).toBe(true);
+    expect(await read('sitemap.xml')).not.toContain('/404');
+    expect(await read('llms.txt')).not.toContain('/404');
+  });
+
+  it('tells an agent what a request costs before it makes one', async () => {
+    await buildAll();
+
+    const llms = await read('llms.txt');
+    expect(llms).toContain(site.apiOrigin);
+    expect(llms).toContain(site.docsOrigin);
+    expect(llms).toContain(site.pricePerPage);
+    expect(llms).toContain('402');
+  });
+
+  it('keeps a deploy out of the index unless it says otherwise', async () => {
+    await buildAll();
+
+    // site.indexable is false without SITE_INDEXABLE, and the suite does not
+    // set it, so this is the stage and preview default: a robots.txt that
+    // stops a non-production deploy competing with production for its own
+    // results.
+    expect(site.indexable).toBe(false);
+    expect(await read('robots.txt')).toContain('Disallow: /');
+  });
+});

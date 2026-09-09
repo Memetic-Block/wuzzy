@@ -21,6 +21,29 @@ export interface SiteOptions {
    * nginx enforces the same rule in production.
    */
   readonly blockedApiPrefixes?: readonly string[];
+  /**
+   * Emit robots.txt, sitemap.xml and llms.txt for the rendered pages.
+   *
+   * Opt-in, and absent for the admin app on purpose: that surface is kept off
+   * the public internet, and publishing a machine-readable index of it would
+   * work against the one thing its separate origin exists to do.
+   */
+  readonly discovery?: DiscoveryOptions;
+}
+
+export interface DiscoveryOptions {
+  /** Absolute origin the files advertise, with no trailing slash. */
+  readonly origin: string;
+  /** One or two lines under the title in llms.txt. */
+  readonly description: string;
+  /**
+   * Whether search engines may index the site. Opt-in, so a stage or preview
+   * deploy that forgets to say anything stays out of the index rather than
+   * competing with production for its own results.
+   */
+  readonly indexable: boolean;
+  /** Extra lines for llms.txt, as bullet text. */
+  readonly notes?: readonly string[];
 }
 
 export interface Site {
@@ -54,7 +77,74 @@ export function createSite(options: SiteOptions): Site {
     await cp(publicDir, distDir, { recursive: true });
     await buildStyles();
     await fingerprintAssets(written);
+    if (options.discovery) await writeDiscovery(options.discovery, written);
     return written;
+  }
+
+  /**
+   * The three files a machine reads before it reads any page.
+   *
+   * Written from the pages that actually rendered rather than from a list
+   * somebody maintains, so a new page is discoverable the moment it exists and
+   * a deleted one stops being advertised. A sitemap that lists a page which is
+   * not there is worse than no sitemap: it is a promise the site breaks.
+   */
+  async function writeDiscovery(
+    discovery: DiscoveryOptions,
+    pages: readonly string[],
+  ): Promise<void> {
+    const origin = discovery.origin.replace(/\/$/, '');
+    // Cloudflare Pages resolves /about to about.html, so the extensionless
+    // path is the one to advertise. 404 is a page the site renders, not a
+    // destination to send anybody to.
+    const paths = pages
+      .map((file) => file.slice(distDir.length).replace(/\\/g, '/'))
+      .map((path) => path.replace(/\.html$/, ''))
+      .map((path) => (path === '/index' ? '/' : path))
+      .filter((path) => path !== '/404')
+      .sort();
+
+    await Bun.write(
+      join(distDir, 'robots.txt'),
+      discovery.indexable
+        ? ['User-agent: *', 'Allow: /', '', `Sitemap: ${origin}/sitemap.xml`, ''].join('\n')
+        : ['User-agent: *', 'Disallow: /', ''].join('\n'),
+    );
+
+    const lastmod = new Date().toISOString();
+    await Bun.write(
+      join(distDir, 'sitemap.xml'),
+      [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+        ...paths.map((path) =>
+          [
+            '  <url>',
+            `    <loc>${origin}${path}</loc>`,
+            `    <lastmod>${lastmod}</lastmod>`,
+            `    <priority>${path === '/' ? '1.0' : '0.8'}</priority>`,
+            '  </url>',
+          ].join('\n'),
+        ),
+        '</urlset>',
+        '',
+      ].join('\n'),
+    );
+
+    await Bun.write(
+      join(distDir, 'llms.txt'),
+      [
+        '# Wuzzy',
+        '',
+        `> ${discovery.description}`,
+        '',
+        '## Pages',
+        '',
+        ...paths.map((path) => `- [${path === '/' ? 'Home' : path}](${origin}${path})`),
+        ...(discovery.notes?.length ? ['', '## Notes', '', ...discovery.notes.map((n) => `- ${n}`)] : []),
+        '',
+      ].join('\n'),
+    );
   }
 
   /**

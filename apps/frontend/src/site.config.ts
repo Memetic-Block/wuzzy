@@ -87,6 +87,13 @@ export const site = {
   protocolVersion: 1,
 
   /**
+   * Whether search engines may index this deploy. Opt-in, so stage and any
+   * preview stay out of the index rather than competing with production for
+   * its own results. Only the live job sets it.
+   */
+  indexable: env.SITE_INDEXABLE === 'true',
+
+  /**
    * Whether commissioning is actually reachable in production. While it is
    * false the Act 2 heading carries a SHIPPING THIS WEEK badge, which is a
    * promise with a date on it: remove the badge by setting this true the day

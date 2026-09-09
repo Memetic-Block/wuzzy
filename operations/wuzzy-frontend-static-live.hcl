@@ -49,6 +49,11 @@ job "wuzzy-frontend-static-live" {
         API_ORIGIN      = "https://api.wuzzy.io"
         WEB_SEARCH_URL  = "https://api.wuzzy.io/web-search"
         SEARCH_ENABLED  = "true"
+
+        # Opt in to being indexed. Only live sets this: stage and any preview
+        # build a robots.txt that disallows everything, so a non-production
+        # deploy cannot compete with production for its own results.
+        SITE_INDEXABLE  = "true"
         X402_NETWORK    = "base"
         X402_PRICE      = "$0.01"
 
