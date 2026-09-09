@@ -63,7 +63,19 @@ job "wuzzy-frontend-static-live" {
         # one registered on Base mainnet in block 51018240.
         X402_PAY_TO    = "0x0Deb462437ab46F703fcd15F9cf9c9Ea6472EAcB"
         EAS_SCHEMA_URL = "https://base.easscan.org/schema/view/0x15616641fbb8e7ee6a63f4904a622a154972e47453062c845845e1f2387f9f1a"
-        # Still unpublished, so this one keeps the placeholder.
+
+        # One metered query, paid and settled on Base: a transferWithAuthorization
+        # of 0.01 USDC to the address above, submitted by a facilitator EOA that
+        # paid the gas. Any settled query qualifies; this is the first.
+        SETTLED_QUERY_URL = "https://basescan.org/tx/0x7c100de17628ee8b3924cad1501defb1c1c56a198124bdf51bdc890638c7c2cf"
+
+        # Commissioning is reachable in production, so the Act 2 heading drops
+        # its SHIPPING THIS WEEK badge. Set the day the flow went live, which is
+        # the only thing that should ever remove that promise.
+        INDEX_CREATION_LIVE = "true"
+
+        # Not listed yet, so the receipts row simply does not carry the entry.
+        # Setting this renders it, with no markup change.
         # BAZAAR_URL     = ""
       }
 
