@@ -3,7 +3,12 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "lib": ["ES2022"],
+    // DOM is here for the types, not for a browser: the canonicalizer and the
+    // link extractor manipulate parsed documents, and Readability's signatures
+    // are written against the standard DOM. It arrived implicitly through
+    // @types/jsdom until that was removed, which made the whole project's
+    // typecheck depend on a package only one module used.
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "forceConsistentCasingInFileNames": true,

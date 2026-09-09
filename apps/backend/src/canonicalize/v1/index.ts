@@ -18,7 +18,7 @@
  */
 import { Readability } from '@mozilla/readability';
 import { createHash } from 'node:crypto';
-import { JSDOM } from 'jsdom';
+import { parseHTML } from 'linkedom';
 import TurndownService from 'turndown';
 
 /**
@@ -119,14 +119,28 @@ function stripNonContent(document: Document): void {
 }
 
 /**
+ * Tells a parsed document where it was fetched from.
+ *
+ * The parser takes markup alone, but relative links have to resolve against
+ * the fetch URL: the same bytes served from two places are two different
+ * documents, and a verifier that did not pin the URL could not reproduce the
+ * hash. Both names are set because Readability reads `baseURI` and reports
+ * `documentURI`.
+ */
+function atUrl(document: Document, url: string): void {
+  Object.defineProperty(document, 'documentURI', { value: url, configurable: true });
+  Object.defineProperty(document, 'baseURI', { value: url, configurable: true });
+}
+
+/**
  * Readability first, so navigation, sidebars and footers never reach the hash.
  * When Readability declines to extract an article — short pages, pages with no
  * candidate container — the whole `<body>` is converted instead, so a page is
  * never silently reduced to nothing.
  */
 export function extract(html: string, url: string): { title: string | null; markdown: string } {
-  const dom = new JSDOM(html, { url });
-  const { document } = dom.window;
+  const { document } = parseHTML(html);
+  atUrl(document, url);
   const documentTitle = document.title.trim() || null;
 
   // Before either path reads it, so Readability and the fallback agree on what
@@ -134,8 +148,12 @@ export function extract(html: string, url: string): { title: string | null; mark
   stripNonContent(document);
 
   // Readability mutates the document it is given, so it gets a clone and the
-  // fallback path still sees the original markup.
-  const article = new Readability(document.cloneNode(true) as Document).parse();
+  // fallback path still sees the original markup. The clone is a new object and
+  // does not inherit the fetch URL, which has to be restated or every relative
+  // link resolves against nothing.
+  const clone = document.cloneNode(true) as Document;
+  atUrl(clone, url);
+  const article = new Readability(clone).parse();
   const fragment = article?.content ?? document.body.innerHTML;
 
   return {

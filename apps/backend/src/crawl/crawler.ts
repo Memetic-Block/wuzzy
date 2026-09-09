@@ -1,6 +1,6 @@
 import { BasicCrawler, Configuration } from '@crawlee/basic';
 import type { DataSource } from 'typeorm';
-import { JSDOM } from 'jsdom';
+import { parseHTML } from 'linkedom';
 import { canonicalize } from '../canonicalize/v1';
 import { createFetcher, type Fetcher } from './http';
 import { loadRobots, type RobotsPolicy } from './robots';
@@ -392,10 +392,12 @@ async function discoverLinks(
   pageUrl: string,
   inScope: (url: string) => Promise<boolean>,
 ): Promise<string[]> {
-  const dom = new JSDOM(new TextDecoder('utf-8').decode(bytes), { url: pageUrl });
+  const { document } = parseHTML(new TextDecoder('utf-8').decode(bytes));
   const hrefs = new Set<string>();
 
-  for (const anchor of dom.window.document.querySelectorAll('a[href]')) {
+  // Resolved against `pageUrl` below rather than against the document, so the
+  // parser is never told where the page came from and needs no base URL.
+  for (const anchor of document.querySelectorAll('a[href]')) {
     const href = anchor.getAttribute('href');
     if (!href) continue;
     try {
