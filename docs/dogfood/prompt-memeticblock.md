@@ -16,7 +16,7 @@ whole of the authentication story.
     API      https://api.wuzzy.io
     Docs     https://docs.wuzzy.io
 
-    WALLET_PRIVATE_KEY   <fill in>
+    WALLET_PRIVATE_KEY   ~/.secrets/wuzzy-agent-evm-key
 
 **This is real money on Base mainnet.** What you spend is gone and nothing is reimbursed. The
 wallet holds USDC, which is what payments are made in; you do not need ETH, because the payment
