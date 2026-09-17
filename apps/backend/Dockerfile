@@ -58,8 +58,8 @@ RUN bun -e "\
   if (r.skipped || !/^[0-9a-f]{64}$/.test(r.contentHash)) throw new Error('canonicalizer smoke failed'); \
   const p = await import('./apps/backend/src/payment/payment.service.ts'); \
   const svc = new p.PaymentService({ enabled: true, payTo: '0x0000000000000000000000000000000000000001', network: 'base', price: '\$0.01', facilitatorUrl: 'http://127.0.0.1:1', description: 'smoke' }); \
-  const out = await svc.authorize(undefined, 'https://example.com/search'); \
-  if (out.kind !== 'rejected' || out.rejection.status !== 402) throw new Error('x402 smoke failed'); \
+  const out = await svc.authorize(p.UNPAID, 'https://example.com/search'); \
+  if (out.kind !== 'rejected' || out.rejection.status !== 402 || !out.rejection.headers['PAYMENT-REQUIRED']) throw new Error('x402 smoke failed'); \
   const a = await import('./apps/backend/src/attest/schema.ts'); \
   if (!a.schemaCarriesNoContent()) throw new Error('attestation schema smoke failed'); \
   a.encodeAttestation({ url: 'https://example.com/t', protocol: 'wuzzy/crawl', protocolVersion: 1, contentHash: 'b'.repeat(64), rawHash: 'a'.repeat(64), fetchedAt: new Date() }); \
