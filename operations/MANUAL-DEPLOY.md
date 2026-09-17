@@ -28,7 +28,7 @@ and the specs carry the image tag literally. Set it across all of them at once:
     ./operations/stamp-sha.sh                      # tip of origin/master
     ./operations/stamp-sha.sh <full-40-char-sha>   # a specific build
 
-It rewrites thirteen sites in ten files, which is the reason it exists: stamping them by hand
+It rewrites every one of those sites at once, which is the reason it exists: stamping them by hand
 is how half a deployment ends up on one build and half on another. The sha appears twice per
 frontend spec, because it selects the image and is also reported by the rendered page.
 
@@ -157,12 +157,13 @@ dies out of gas half way is recoverable, but only by funding it again and re-run
 
 **Check the facilitator before anything quotes a price.** Wrong credentials and a facilitator
 that does not cover Base both surface the same way, as a payer being turned away, and both are
-free to rule out first:
+free to rule out first. Submit [wuzzy-check-facilitator.hcl](wuzzy-check-facilitator.hcl) from
+the UI. It reads the credentials from `kv/wuzzy/api` the way the API does, so nobody needs a
+token to exec into an allocation, and nothing about them leaves the cluster.
 
-    X402_CDP_API_KEY_ID=... X402_CDP_API_KEY_SECRET=... bun run check:facilitator
-
-It asks the facilitator what it settles and fails unless that includes an exact payment on Base
-mainnet. It never prints the credentials.
+The job fails unless the facilitator settles an exact payment on Base mainnet in **both** x402
+versions, `base` for version 1 and `eip155:8453` for version 2, because every 402 offers both.
+Its log names which version is missing. It never prints the credentials.
 
 ## Seeding the global index
 

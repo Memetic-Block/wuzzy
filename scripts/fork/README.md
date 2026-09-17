@@ -88,9 +88,14 @@ somewhere else with `WUZZY_DOCS_DIR`.
 
 The dry run uses `facilitator.ts` here, which settles against the fork. The live run uses
 Coinbase's, which settles Base mainnet and needs credentials. Before recording, check the live
-one works, because a bad key and an unsupported chain look identical from the client side:
+one works, because a bad key and an unsupported chain look identical from the client side.
+Submit [operations/wuzzy-check-facilitator.hcl](../../operations/wuzzy-check-facilitator.hcl)
+from the Nomad UI: the credentials are in Vault, and that job reads them where they live.
 
-    X402_CDP_API_KEY_ID=... X402_CDP_API_KEY_SECRET=... bun run check:facilitator
+The same check runs locally against a facilitator that needs no credentials, which is how to
+confirm this one before a rehearsal:
+
+    X402_FACILITATOR_URL=http://127.0.0.1:39601 bun run check:facilitator
 
 `facilitator.ts` refuses to serve a non-local chain with anvil's published test account, so it
 cannot be pointed at mainnet by accident. It detects the node rather than the chain id: a fork
