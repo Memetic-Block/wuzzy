@@ -316,9 +316,12 @@ export class PaymentService {
       kind: 'rejected',
       rejection: {
         status: 402,
-        // Every 402 answers both versions at once. A v2 client reads this header
-        // before it looks at the body, and a v1 client only knows the body, so
-        // neither has to be told which version this server speaks.
+        // Every 402 answers both versions at once. A v1-era client only knows the
+        // body. A client built on the scoped @x402 packages reads this header
+        // first and signs in the version it names, whatever it was configured
+        // for, so one registered for v1 alone fails here and never reads the
+        // body. Nothing in an unpaid request says which client it is, so the
+        // header stays, and the docs tell v1-only configurations to add v2.
         headers: {
           'PAYMENT-REQUIRED': encodePaymentRequiredHeader({
             x402Version: 2,

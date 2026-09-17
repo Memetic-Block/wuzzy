@@ -39,8 +39,12 @@ carries the meaning.
 keys: a signed payment is the only credential, over
 [x402](https://x402.org). The sequence mirrors the reference `x402-express` middleware.
 
-Both versions of the protocol are answered, so a client on either can pay without being told
-which one this server speaks.
+Both versions of the protocol are answered. A client from the unscoped `x402-fetch` line reads
+only the body and pays in version 1. A client built on the scoped `@x402/*` packages reads the
+`PAYMENT-REQUIRED` header first and signs in version 2, so it needs a version 2 scheme
+registered: one configured with `ExactEvmSchemeV1` alone throws
+`No client registered for x402 version: 2` rather than falling back to the body.
+`registerExactEvmScheme` registers both.
 
 1. Call without a payment. The server answers **402** with what it will take, stated once per
    version: version 2 requirements base64 encoded in the `PAYMENT-REQUIRED` header, and

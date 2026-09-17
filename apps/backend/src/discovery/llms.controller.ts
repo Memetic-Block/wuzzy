@@ -50,6 +50,7 @@ export class LlmsController {
       ? [
           `- An unpaid request answers HTTP 402 with x402 payment requirements in both protocol versions: version 1 in the body, version 2 in the PAYMENT-REQUIRED header.`,
           `- Sign either and retry with it in X-PAYMENT (version 1) or PAYMENT-SIGNATURE (version 2).`,
+          `- Clients on the scoped @x402 packages read PAYMENT-REQUIRED first, so they need a version 2 scheme registered even if they also register version 1.`,
           `- A search costs ${usd(accepted.maxAmountRequired)} and a crawled page costs ${this.indexes.pricePerPage}.`,
           `- Network: ${String(accepted.network)}, or ${acceptedV2?.network ?? 'its CAIP-2 id'} in version 2. Asset: ${String(accepted.asset)}. Pay to: ${String(accepted.payTo)}.`,
           `- No accounts and no API keys: a signed payment is the only credential.`,
