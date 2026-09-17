@@ -46,10 +46,11 @@ export class SearchController {
       return;
     }
 
-    const outcome = await this.payment.authorize(request.header('X-PAYMENT'), resourceUrl(request));
+    const outcome = await this.payment.authorize(request, resourceUrl(request));
 
     if (outcome.kind === 'rejected') {
-      response.status(outcome.rejection.status).json(outcome.rejection.body);
+      const { status, headers, body } = outcome.rejection;
+      response.status(status).set(headers).json(body);
       return;
     }
 
@@ -81,8 +82,7 @@ export class SearchController {
     }
 
     if (outcome.kind === 'accepted') {
-      const header = await this.payment.settle(outcome.accepted);
-      if (header) response.setHeader('X-PAYMENT-RESPONSE', header);
+      response.set(await this.payment.settle(outcome.accepted));
     }
 
     response.status(HttpStatus.OK).json({

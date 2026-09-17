@@ -17,6 +17,7 @@ export const X402_VERSION = 1;
 
 export interface PaymentRejection {
   readonly status: 402;
+  readonly headers: Readonly<Record<string, string>>;
   readonly body: {
     x402Version: number;
     error: string;
@@ -29,6 +30,14 @@ export interface PaymentAcceptance {
   readonly payload: PaymentPayloadV1;
   readonly requirements: PaymentRequirementsV1;
 }
+
+/** Where a payment arrives: the request's headers, read by name. */
+export interface PaymentHeaders {
+  header(name: string): string | undefined;
+}
+
+/** A request that carries no payment, for asking the meter what it would charge. */
+export const UNPAID: PaymentHeaders = { header: () => undefined };
 
 /**
  * What a request is being charged, when it is not the flat per-query price.
@@ -191,7 +200,7 @@ export class PaymentService {
 
   /** Decides whether a request may proceed, without touching the handler. */
   async authorize(
-    header: string | undefined,
+    request: PaymentHeaders,
     resourceUrl: string,
     quote?: PriceQuote,
   ): Promise<PaymentOutcome> {
@@ -202,6 +211,7 @@ export class PaymentService {
       kind: 'rejected',
       rejection: {
         status: 402,
+        headers: {},
         body: {
           x402Version: X402_VERSION,
           error,
@@ -211,6 +221,7 @@ export class PaymentService {
       },
     });
 
+    const header = request.header('X-PAYMENT');
     if (!header) return reject('X-PAYMENT header is required');
 
     let payload: PaymentPayloadV1;
@@ -247,15 +258,16 @@ export class PaymentService {
 
   /**
    * Settles after the handler succeeded, so a failed query is never charged for.
-   * Returns the X-PAYMENT-RESPONSE header value, or null if settlement failed.
+   * Returns the headers that report the settlement to the payer, which are none
+   * if settlement failed.
    */
-  async settle(accepted: PaymentAcceptance): Promise<string | null> {
+  async settle(accepted: PaymentAcceptance): Promise<Record<string, string>> {
     try {
       const response = await this.facilitator.settle(accepted.payload, accepted.requirements);
-      return encodePaymentResponseHeader(response);
+      return { 'X-PAYMENT-RESPONSE': encodePaymentResponseHeader(response) };
     } catch (error) {
       this.logger.error(`settlement failed: ${error instanceof Error ? error.message : error}`);
-      return null;
+      return {};
     }
   }
 }

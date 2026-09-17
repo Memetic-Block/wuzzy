@@ -2,7 +2,7 @@ import { Controller, Get, Header, Inject, Req } from '@nestjs/common';
 import type { Request } from 'express';
 import { DISCOVERY_CONFIG, type DiscoveryConfig } from './discovery.config';
 import { INDEXES_CONFIG, type IndexesConfig } from '../indexes/index.config';
-import { PaymentService, resourceUrl } from '../payment/payment.service';
+import { PaymentService, UNPAID, resourceUrl } from '../payment/payment.service';
 
 /**
  * What this API is, for a reader that is not a browser.
@@ -35,7 +35,7 @@ export class LlmsController {
 
     // Ask the meter what a search costs by making the request a payer makes
     // and reading the answer. Nothing here restates a price.
-    const quote = await this.payment.authorize(undefined, `${origin}/search`);
+    const quote = await this.payment.authorize(UNPAID, `${origin}/search`);
     const accepted =
       quote.kind === 'rejected'
         ? ((quote.rejection.body as { accepts?: readonly Record<string, unknown>[] }).accepts?.[0] ??

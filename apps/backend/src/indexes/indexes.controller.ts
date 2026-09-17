@@ -124,12 +124,13 @@ export class IndexesController {
       return;
     }
 
-    const outcome = await this.payment.authorize(header(request), resourceUrl(request), {
+    const outcome = await this.payment.authorize(request, resourceUrl(request), {
       price: this.indexes.priceForPages(urls.length),
       description: `Commission a Wuzzy index of ${urls.length} page(s)`,
     });
     if (outcome.kind === 'rejected') {
-      response.status(outcome.rejection.status).json(outcome.rejection.body);
+      const { status, headers, body } = outcome.rejection;
+      response.status(status).set(headers).json(body);
       return;
     }
 
@@ -152,8 +153,7 @@ export class IndexesController {
       });
 
       if (outcome.kind === 'accepted') {
-        const settled = await this.payment.settle(outcome.accepted);
-        if (settled) response.setHeader('X-PAYMENT-RESPONSE', settled);
+        response.set(await this.payment.settle(outcome.accepted));
       }
 
       // Paid for, so start it now rather than at the next sweep.
@@ -182,12 +182,13 @@ export class IndexesController {
       return;
     }
 
-    const outcome = await this.payment.authorize(header(request), resourceUrl(request), {
+    const outcome = await this.payment.authorize(request, resourceUrl(request), {
       price: this.indexes.priceForPages(urls.length),
       description: `Append ${urls.length} page(s) to a Wuzzy index`,
     });
     if (outcome.kind === 'rejected') {
-      response.status(outcome.rejection.status).json(outcome.rejection.body);
+      const { status, headers, body } = outcome.rejection;
+      response.status(status).set(headers).json(body);
       return;
     }
 
@@ -202,8 +203,7 @@ export class IndexesController {
     try {
       const intake = await this.indexes.append(index, urls);
       if (outcome.kind === 'accepted') {
-        const settled = await this.payment.settle(outcome.accepted);
-        if (settled) response.setHeader('X-PAYMENT-RESPONSE', settled);
+        response.set(await this.payment.settle(outcome.accepted));
       }
 
       await this.requestCrawl(index.id);
@@ -227,9 +227,10 @@ export class IndexesController {
 
     // Deletion is free, so there is nothing to settle and nothing to refund;
     // the payment is a signature proving who is asking.
-    const outcome = await this.payment.authorize(header(request), resourceUrl(request));
+    const outcome = await this.payment.authorize(request, resourceUrl(request));
     if (outcome.kind === 'rejected') {
-      response.status(outcome.rejection.status).json(outcome.rejection.body);
+      const { status, headers, body } = outcome.rejection;
+      response.status(status).set(headers).json(body);
       return;
     }
     const payer = outcome.kind === 'accepted' ? payerOf(outcome.accepted) : null;
@@ -242,8 +243,6 @@ export class IndexesController {
     response.status(HttpStatus.OK).json({ deleted: index.id });
   }
 }
-
-const header = (request: Request): string | undefined => request.header('X-PAYMENT');
 
 /**
  * The payer owns what they commissioned. With the meter off there is no payer,
