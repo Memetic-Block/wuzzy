@@ -8,6 +8,7 @@ import { getQueueToken } from '@nestjs/bullmq';
 import type { Job } from 'bullmq';
 import type { INestApplication } from '@nestjs/common';
 import { DataSource } from 'typeorm';
+import { decodePaymentRequiredHeader } from '@x402/core/http';
 import { safeBase64Encode } from '@x402/core/utils';
 import { SCHEMA_DEFINITION, encodeAttestation, schemaCarriesNoIndex } from '../attest/schema';
 import { page, PROSE, startMockSite, type MockSite } from '../crawl/mock-site';
@@ -220,6 +221,19 @@ async function boot(source: DataSource, overrides: Partial<PaymentConfig> = {}) 
   return { app, url: (await app.getUrl()).replace('[::1]', '127.0.0.1') };
 }
 
+/** A wallet's signed authorization, which is the same in both protocol versions. */
+const signed = (from: string, value = '10000') => ({
+  signature: `0x${'1'.repeat(130)}`,
+  authorization: {
+    from,
+    to: PAY_TO,
+    value,
+    validAfter: '0',
+    validBefore: String(Math.floor(Date.now() / 1000) + 3600),
+    nonce: `0x${'2'.repeat(64)}`,
+  },
+});
+
 /** A well-formed X-PAYMENT header from a given wallet; the facilitator judges it. */
 const paymentHeader = (from: string, value = '10000'): string =>
   safeBase64Encode(
@@ -227,17 +241,7 @@ const paymentHeader = (from: string, value = '10000'): string =>
       x402Version: 1,
       scheme: 'exact',
       network: 'base',
-      payload: {
-        signature: `0x${'1'.repeat(130)}`,
-        authorization: {
-          from,
-          to: PAY_TO,
-          value,
-          validAfter: '0',
-          validBefore: String(Math.floor(Date.now() / 1000) + 3600),
-          nonce: `0x${'2'.repeat(64)}`,
-        },
-      },
+      payload: signed(from, value),
     }),
   );
 
@@ -256,6 +260,28 @@ const send = (
     },
     ...(method === 'DELETE' ? {} : { body: JSON.stringify(body) }),
   });
+
+/**
+ * Pays the way a v2 client does: ask, read the requirements from the
+ * PAYMENT-REQUIRED header, and sign exactly what was offered.
+ */
+async function sendV2(url: string, path: string, body: unknown, wallet: string) {
+  const quote = await send(url, path, body);
+  const header = quote.headers.get('payment-required');
+  if (!header) throw new Error(`no PAYMENT-REQUIRED header on a ${quote.status}`);
+  const [accepted] = decodePaymentRequiredHeader(header).accepts;
+
+  return fetch(`${url}${path}`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'PAYMENT-SIGNATURE': safeBase64Encode(
+        JSON.stringify({ x402Version: 2, accepted, payload: signed(wallet) }),
+      ),
+    },
+    body: JSON.stringify(body),
+  });
+}
 
 /** One indexed, embedded, optionally attested document, joined to `indexId`. */
 async function seedDocument(
@@ -886,6 +912,35 @@ describe('configurable indexes', () => {
       // Verified, so the wallet was proven; never settled, so it paid nothing.
       expect(facilitator!.verified).toHaveLength(1);
       expect(facilitator!.settled).toHaveLength(0);
+    } finally {
+      await app.close();
+    }
+  });
+
+  scenario('wallets are recognized whichever x402 version they pay with', async () => {
+    const source = ready();
+    if (!source) return;
+
+    const index = await makeIndex(source, { readPolicy: 'allowlist', allowlist: [WALLET_B] });
+    await seedDocument(source, 'https://docs.test/member', 'paymaster sponsors gas', {
+      indexId: index.id,
+    });
+
+    const { app, url } = await boot(source);
+    try {
+      const query = { query: 'paymaster', index: index.id };
+
+      const listed = await sendV2(url, '/search', query, WALLET_B);
+      expect(listed.status).toBe(200);
+      expect(facilitator!.settled).toHaveLength(1);
+
+      const unlisted = await sendV2(url, '/search', query, WALLET_C);
+      expect(unlisted.status).toBe(403);
+      // Both were verified as v2 payments; only the listed wallet paid.
+      expect(facilitator!.verified).toHaveLength(2);
+      const versions = (facilitator!.verified as { x402Version: number }[]).map((v) => v.x402Version);
+      expect(versions).toEqual([2, 2]);
+      expect(facilitator!.settled).toHaveLength(1);
     } finally {
       await app.close();
     }

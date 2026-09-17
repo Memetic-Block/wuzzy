@@ -28,6 +28,26 @@ Feature: x402-metered search
     Then the response status is 402
     And no search results are returned
 
+  Scenario: unpaid request offers both protocol versions
+    Given the meter is enabled
+    When a client POSTs to /search without payment
+    Then the response status is 402
+    And the body carries x402 version 1 payment requirements
+    And the PAYMENT-REQUIRED header carries x402 version 2 payment requirements
+    And both versions quote the same amount, asset and pay-to address
+
+  Scenario: a version 2 payment is answered in version 2
+    Given the meter is enabled
+    When a client POSTs to /search with a valid x402 version 2 payment
+    Then the response status is 200
+    And the settlement is returned in the PAYMENT-RESPONSE header
+
+  Scenario: a payment is read in the version of the header that carries it
+    Given the meter is enabled
+    When a client sends a version 1 payment in PAYMENT-SIGNATURE
+    Then the response status is 402
+    And the facilitator is never asked to verify it
+
   Scenario: dev mode serves openly and says so
     Given the meter is disabled via X402_ENABLED=false
     When a client POSTs to /search without payment
@@ -37,6 +57,13 @@ Feature: x402-metered search
   Scenario: settlement lands onchain
     Given the meter is enabled against Base mainnet with a fresh receiving address
     When one real paid query completes from an external wallet
+    Then a USDC transfer to the receiving address is visible on Basescan
+    And the transaction link is recorded in the evidence pack
+
+  @mainnet @manual
+  Scenario: a version 2 settlement lands onchain
+    Given the meter is enabled against Base mainnet
+    When one real paid query completes from an x402 version 2 client
     Then a USDC transfer to the receiving address is visible on Basescan
     And the transaction link is recorded in the evidence pack
 

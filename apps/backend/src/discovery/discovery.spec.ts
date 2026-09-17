@@ -59,7 +59,9 @@ describe('llms.txt', () => {
 
     expect(body).toContain('HTTP 402');
     expect(body).toContain('X-PAYMENT');
+    expect(body).toContain('PAYMENT-SIGNATURE');
     expect(body).toContain('Network: base');
+    expect(body).toContain('eip155:8453');
     // USDC on Base, as the meter resolves it from the network.
     expect(body).toContain('0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913');
     expect(body).toContain('Pay to: 0x0Deb462437ab46F703fcd15F9cf9c9Ea6472EAcB');

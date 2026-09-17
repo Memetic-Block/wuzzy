@@ -1,5 +1,6 @@
 import { Controller, Get, Header, Inject, Req } from '@nestjs/common';
 import type { Request } from 'express';
+import { decodePaymentRequiredHeader } from '@x402/core/http';
 import { DISCOVERY_CONFIG, type DiscoveryConfig } from './discovery.config';
 import { INDEXES_CONFIG, type IndexesConfig } from '../indexes/index.config';
 import { PaymentService, UNPAID, resourceUrl } from '../payment/payment.service';
@@ -41,12 +42,16 @@ export class LlmsController {
         ? ((quote.rejection.body as { accepts?: readonly Record<string, unknown>[] }).accepts?.[0] ??
           null)
         : null;
+    const required =
+      quote.kind === 'rejected' ? quote.rejection.headers['PAYMENT-REQUIRED'] : undefined;
+    const acceptedV2 = required ? decodePaymentRequiredHeader(required).accepts[0] : undefined;
 
     const paying = accepted
       ? [
-          `- An unpaid request answers HTTP 402 with x402 payment requirements. Sign one and retry with it in the X-PAYMENT header.`,
+          `- An unpaid request answers HTTP 402 with x402 payment requirements in both protocol versions: version 1 in the body, version 2 in the PAYMENT-REQUIRED header.`,
+          `- Sign either and retry with it in X-PAYMENT (version 1) or PAYMENT-SIGNATURE (version 2).`,
           `- A search costs ${usd(accepted.maxAmountRequired)} and a crawled page costs ${this.indexes.pricePerPage}.`,
-          `- Network: ${String(accepted.network)}. Asset: ${String(accepted.asset)}. Pay to: ${String(accepted.payTo)}.`,
+          `- Network: ${String(accepted.network)}, or ${acceptedV2?.network ?? 'its CAIP-2 id'} in version 2. Asset: ${String(accepted.asset)}. Pay to: ${String(accepted.payTo)}.`,
           `- No accounts and no API keys: a signed payment is the only credential.`,
           `- A request that fails is never charged for. Settlement happens after the handler produced a response.`,
         ]

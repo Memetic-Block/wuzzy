@@ -4,6 +4,7 @@ import { Test } from '@nestjs/testing';
 import type { INestApplication } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { getDataSourceToken } from '@nestjs/typeorm';
+import { decodePaymentRequiredHeader, decodePaymentResponseHeader } from '@x402/core/http';
 import { safeBase64Encode } from '@x402/core/utils';
 import { ChunkEntity } from '../database/chunk.entity';
 import { DocumentEntity } from '../database/document.entity';
@@ -174,26 +175,35 @@ const post = (url: string, body: unknown, headers: Record<string, string> = {}) 
     body: JSON.stringify(body),
   });
 
+/** The signed authorization, which is the same in both protocol versions. */
+const signed = () => ({
+  signature: `0x${'1'.repeat(130)}`,
+  authorization: {
+    from: '0x1111111111111111111111111111111111111111',
+    to: PAY_TO,
+    value: '10000',
+    validAfter: '0',
+    validBefore: String(Math.floor(Date.now() / 1000) + 3600),
+    nonce: `0x${'2'.repeat(64)}`,
+  },
+});
+
 /** A well-formed X-PAYMENT header; the mock facilitator decides if it is valid. */
 const paymentHeader = (): string =>
   safeBase64Encode(
-    JSON.stringify({
-      x402Version: 1,
-      scheme: 'exact',
-      network: 'base',
-      payload: {
-        signature: `0x${'1'.repeat(130)}`,
-        authorization: {
-          from: '0x1111111111111111111111111111111111111111',
-          to: PAY_TO,
-          value: '10000',
-          validAfter: '0',
-          validBefore: String(Math.floor(Date.now() / 1000) + 3600),
-          nonce: `0x${'2'.repeat(64)}`,
-        },
-      },
-    }),
+    JSON.stringify({ x402Version: 1, scheme: 'exact', network: 'base', payload: signed() }),
   );
+
+/** A version 2 payment for requirements a 402 offered, as PAYMENT-SIGNATURE carries it. */
+const paymentSignature = (accepted: unknown): string =>
+  safeBase64Encode(JSON.stringify({ x402Version: 2, accepted, payload: signed() }));
+
+/** What a v2 client reads from a 402: the header, not the body. */
+const requiredV2 = (response: Response) => {
+  const header = response.headers.get('payment-required');
+  if (!header) throw new Error('402 carried no PAYMENT-REQUIRED header');
+  return decodePaymentRequiredHeader(header);
+};
 
 describe('x402-metered search', () => {
   scenario('unpaid request receives payment requirements', async () => {
@@ -278,6 +288,129 @@ describe('x402-metered search', () => {
       const body = (await insufficient.json()) as Record<string, any>;
       expect(body.error).toBe('insufficient_funds');
       expect(body.results).toBeUndefined();
+    } finally {
+      await app.close();
+    }
+  });
+
+  scenario('unpaid request offers both protocol versions', async () => {
+    const source = ready();
+    if (!source) return;
+    await seedCorpus(source, null);
+
+    const { app, url } = await boot(source, {});
+    try {
+      const response = await post(url, { query: 'deploy a contract' });
+      expect(response.status).toBe(402);
+
+      const body = (await response.json()) as Record<string, any>;
+      expect(body.x402Version).toBe(1);
+      const [v1] = body.accepts;
+
+      const required = requiredV2(response);
+      expect(required.x402Version).toBe(2);
+      expect(required.resource.url).toBe(v1.resource);
+      const [v2] = required.accepts;
+      expect(v2!.network).toBe('eip155:8453');
+
+      expect(v2!.amount).toBe(v1.maxAmountRequired);
+      expect(v2!.asset).toBe(v1.asset);
+      expect(v2!.payTo).toBe(v1.payTo);
+
+      // A quote belongs to one request. A cached one would be replayed against
+      // the next request, which may be priced differently.
+      expect(response.headers.get('cache-control')).toBe('no-store');
+    } finally {
+      await app.close();
+    }
+  });
+
+  scenario('a version 2 payment is answered in version 2', async () => {
+    const source = ready();
+    if (!source) return;
+    await seedCorpus(source, `0x${'e'.repeat(64)}`);
+
+    const { app, url } = await boot(source, {});
+    try {
+      // As a v2 client does it: ask, read the header, sign exactly what it offered.
+      const quote = await post(url, { query: 'deploy a contract' });
+      const [accepted] = requiredV2(quote).accepts;
+
+      const response = await post(
+        url,
+        { query: 'deploy a contract' },
+        { 'PAYMENT-SIGNATURE': paymentSignature(accepted) },
+      );
+      expect(response.status).toBe(200);
+      expect((await response.json()).results.length).toBeGreaterThan(0);
+
+      const settlement = response.headers.get('payment-response');
+      expect(settlement).toBeTruthy();
+      expect(decodePaymentResponseHeader(settlement!).success).toBe(true);
+      expect(response.headers.get('x-payment-response')).toBeNull();
+
+      // Forwarded as v2, against the network's CAIP-2 id rather than its v1 name.
+      const [verified] = facilitator!.verified as Record<string, any>[];
+      expect(verified!.x402Version).toBe(2);
+      expect(verified!.paymentRequirements.network).toBe('eip155:8453');
+      expect(facilitator!.settled).toHaveLength(1);
+    } finally {
+      await app.close();
+    }
+  });
+
+  scenario('a payment is read in the version of the header that carries it', async () => {
+    const source = ready();
+    if (!source) return;
+    await seedCorpus(source, null);
+
+    const { app, url } = await boot(source, {});
+    try {
+      const [accepted] = requiredV2(await post(url, { query: 'deploy' })).accepts;
+
+      const v1InV2 = await post(url, { query: 'deploy' }, { 'PAYMENT-SIGNATURE': paymentHeader() });
+      expect(v1InV2.status).toBe(402);
+      expect((await v1InV2.json()).results).toBeUndefined();
+
+      const v2InV1 = await post(
+        url,
+        { query: 'deploy' },
+        { 'X-PAYMENT': paymentSignature(accepted) },
+      );
+      expect(v2InV1.status).toBe(402);
+
+      // Which one counts is not a choice to make on the payer's behalf.
+      const both = await post(
+        url,
+        { query: 'deploy' },
+        { 'X-PAYMENT': paymentHeader(), 'PAYMENT-SIGNATURE': paymentSignature(accepted) },
+      );
+      expect(both.status).toBe(402);
+
+      expect(facilitator!.verified).toHaveLength(0);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('refuses a version 2 payment signed for a different quote', async () => {
+    const source = ready();
+    if (!source) return;
+    await seedCorpus(source, null);
+
+    const { app, url } = await boot(source, {});
+    try {
+      const [accepted] = requiredV2(await post(url, { query: 'deploy' })).accepts;
+      const underpaid = { ...accepted, amount: '1' };
+
+      const response = await post(
+        url,
+        { query: 'deploy' },
+        { 'PAYMENT-SIGNATURE': paymentSignature(underpaid) },
+      );
+      expect(response.status).toBe(402);
+      expect(requiredV2(response).error).toBe('Unable to find matching payment requirements');
+      expect(facilitator!.verified).toHaveLength(0);
     } finally {
       await app.close();
     }

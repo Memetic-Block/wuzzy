@@ -86,6 +86,14 @@ Feature: configurable indexes
     Then the response status is 403
     And wallet C's payment is not settled
 
+  Scenario: wallets are recognized whichever x402 version they pay with
+    Given a ready index with read_policy allowlist including wallet B
+    When wallet B pays for /search scoped to that index with an x402 version 2 payment
+    Then the response status is 200
+    When wallet C pays for /search scoped to that index with an x402 version 2 payment
+    Then the response status is 403
+    And wallet C's payment is not settled
+
   Scenario: unlisted indexes do not appear in the catalog
     Given an index with visibility unlisted
     When a client fetches the public index catalog

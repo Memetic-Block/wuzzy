@@ -1,19 +1,34 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { getAddress } from 'viem';
 import { createFacilitatorConfig } from '@coinbase/x402';
-import { decodePaymentSignatureHeader, encodePaymentResponseHeader } from '@x402/core/http';
+import {
+  decodePaymentSignatureHeader,
+  encodePaymentRequiredHeader,
+  encodePaymentResponseHeader,
+} from '@x402/core/http';
 import {
   PaymentPayloadV1Schema,
+  PaymentPayloadV2Schema,
   type PaymentPayloadV1,
+  type PaymentPayloadV2,
   type PaymentRequirementsV1,
 } from '@x402/core/schemas';
-import { HTTPFacilitatorClient, type FacilitatorConfig } from '@x402/core/server';
-import { VerifyError, type SettleResponse, type VerifyResponse } from '@x402/core/types';
+import {
+  HTTPFacilitatorClient,
+  PAYMENT_REQUIRED_CACHE_CONTROL,
+  type FacilitatorConfig,
+} from '@x402/core/server';
+import {
+  VerifyError,
+  type PaymentRequirements,
+  type ResourceInfo,
+  type SettleResponse,
+  type VerifyResponse,
+} from '@x402/core/types';
+import { deepEqual } from '@x402/core/utils';
 import { ExactEvmScheme } from '@x402/evm/exact/server';
 import { EVM_NETWORK_CHAIN_ID_MAP } from '@x402/evm/v1';
 import { PAYMENT_CONFIG, type PaymentConfig } from './payment.config';
-
-export const X402_VERSION = 1;
 
 export interface PaymentRejection {
   readonly status: 402;
@@ -26,9 +41,27 @@ export interface PaymentRejection {
   };
 }
 
-export interface PaymentAcceptance {
-  readonly payload: PaymentPayloadV1;
-  readonly requirements: PaymentRequirementsV1;
+/**
+ * A verified payment, kept in the protocol version it was signed in so that
+ * settlement is reported back in that version too.
+ */
+export type PaymentAcceptance =
+  | {
+      readonly x402Version: 1;
+      readonly payload: PaymentPayloadV1;
+      readonly requirements: PaymentRequirementsV1;
+    }
+  | {
+      readonly x402Version: 2;
+      readonly payload: PaymentPayloadV2;
+      readonly requirements: PaymentRequirements;
+    };
+
+/** The same quote, stated once for each protocol version this meter answers. */
+export interface PaymentOffer {
+  readonly v1: PaymentRequirementsV1[];
+  readonly v2: PaymentRequirements[];
+  readonly resource: ResourceInfo;
 }
 
 /** Where a payment arrives: the request's headers, read by name. */
@@ -80,7 +113,8 @@ export function resourceUrl(request: {
 /**
  * The paying wallet, taken from the signed authorization rather than from the
  * facilitator's reply: this is the field the payer actually put a signature
- * over, so it is the one that can carry an authorization decision.
+ * over, so it is the one that can carry an authorization decision. An `exact`
+ * EVM payment carries it in the same place in both protocol versions.
  */
 export function payerOf(accepted: PaymentAcceptance): string | null {
   const payload = accepted.payload.payload as { authorization?: { from?: unknown } } | undefined;
@@ -142,8 +176,60 @@ function facilitatorFor(config: PaymentConfig): FacilitatorConfig {
  * is all a facilitator needs to verify a v1 payment.
  */
 interface Facilitator {
-  verify(payload: PaymentPayloadV1, requirements: PaymentRequirementsV1): Promise<VerifyResponse>;
-  settle(payload: PaymentPayloadV1, requirements: PaymentRequirementsV1): Promise<SettleResponse>;
+  verify(
+    payload: PaymentAcceptance['payload'],
+    requirements: PaymentAcceptance['requirements'],
+  ): Promise<VerifyResponse>;
+  settle(
+    payload: PaymentAcceptance['payload'],
+    requirements: PaymentAcceptance['requirements'],
+  ): Promise<SettleResponse>;
+}
+
+/** A payment header's JSON, or undefined when it is not base64 JSON at all. */
+function decodeHeader(header: string): unknown {
+  try {
+    return decodePaymentSignatureHeader(header);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The header a payment arrives in is its version. A payload that claims the
+ * other version is refused here, before any facilitator sees it, rather than
+ * rewritten to fit.
+ */
+function readV1(header: string, offer: PaymentOffer): PaymentAcceptance | string {
+  const decoded = PaymentPayloadV1Schema.safeParse(decodeHeader(header));
+  if (!decoded.success) return 'X-PAYMENT does not carry an x402 version 1 payment';
+  const payload = decoded.data;
+
+  const requirements = offer.v1.find(
+    (candidate) => candidate.scheme === payload.scheme && candidate.network === payload.network,
+  );
+  if (!requirements) return 'Unable to find matching payment requirements';
+  return { x402Version: 1, payload, requirements };
+}
+
+/**
+ * v2 states which requirements the payer accepted, so the whole quote is
+ * compared rather than its scheme and network: a payment signed for another
+ * amount or recipient is not a payment for this request. A client may add to
+ * `extra`, so only the fields we offered have to be there.
+ */
+function readV2(header: string, offer: PaymentOffer): PaymentAcceptance | string {
+  const decoded = PaymentPayloadV2Schema.safeParse(decodeHeader(header));
+  if (!decoded.success) return 'PAYMENT-SIGNATURE does not carry an x402 version 2 payment';
+  const payload = decoded.data;
+  const { extra: acceptedExtra, ...accepted } = payload.accepted;
+
+  const requirements = offer.v2.find(({ extra, ...offered }) => {
+    if (!deepEqual(offered, accepted)) return false;
+    return Object.entries(extra).every(([key, value]) => deepEqual(value, acceptedExtra?.[key]));
+  });
+  if (!requirements) return 'Unable to find matching payment requirements';
+  return { x402Version: 2, payload, requirements };
 }
 
 /**
@@ -175,27 +261,46 @@ export class PaymentService {
     return this.config.enabled;
   }
 
-  async buildRequirements(resourceUrl: string, quote?: PriceQuote): Promise<PaymentRequirementsV1[]> {
-    const { amount, asset, extra } = await this.exact.parsePrice(
-      quote?.price ?? this.config.price,
-      this.chain,
-    );
+  /**
+   * Both versions are built from one parsed price, so a v1 and a v2 client
+   * asking about the same request cannot be quoted different amounts.
+   */
+  async buildRequirements(resourceUrl: string, quote?: PriceQuote): Promise<PaymentOffer> {
+    const price = await this.exact.parsePrice(quote?.price ?? this.config.price, this.chain);
+    const description = quote?.description ?? this.config.description;
+    const payTo = getAddress(this.config.payTo);
+    const asset = getAddress(price.asset);
+    const extra = price.extra ?? {};
 
-    return [
-      {
-        scheme: 'exact',
-        network: this.config.network,
-        maxAmountRequired: amount,
-        resource: resourceUrl,
-        description: quote?.description ?? this.config.description,
-        mimeType: 'application/json',
-        payTo: getAddress(this.config.payTo),
-        maxTimeoutSeconds: 60,
-        asset: getAddress(asset),
-        outputSchema: { input: { type: 'http', method: 'POST', discoverable: true } },
-        extra: extra ?? {},
-      },
-    ];
+    return {
+      v1: [
+        {
+          scheme: 'exact',
+          network: this.config.network,
+          maxAmountRequired: price.amount,
+          resource: resourceUrl,
+          description,
+          mimeType: 'application/json',
+          payTo,
+          maxTimeoutSeconds: 60,
+          asset,
+          outputSchema: { input: { type: 'http', method: 'POST', discoverable: true } },
+          extra,
+        },
+      ],
+      v2: [
+        {
+          scheme: 'exact',
+          network: this.chain,
+          amount: price.amount,
+          asset,
+          payTo,
+          maxTimeoutSeconds: 60,
+          extra,
+        },
+      ],
+      resource: { url: resourceUrl, description, mimeType: 'application/json' },
+    };
   }
 
   /** Decides whether a request may proceed, without touching the handler. */
@@ -206,42 +311,42 @@ export class PaymentService {
   ): Promise<PaymentOutcome> {
     if (!this.config.enabled) return { kind: 'open' };
 
-    const requirements = await this.buildRequirements(resourceUrl, quote);
+    const offer = await this.buildRequirements(resourceUrl, quote);
     const reject = (error: string, payer?: string): PaymentOutcome => ({
       kind: 'rejected',
       rejection: {
         status: 402,
-        headers: {},
+        // Every 402 answers both versions at once. A v2 client reads this header
+        // before it looks at the body, and a v1 client only knows the body, so
+        // neither has to be told which version this server speaks.
+        headers: {
+          'PAYMENT-REQUIRED': encodePaymentRequiredHeader({
+            x402Version: 2,
+            error,
+            resource: offer.resource,
+            accepts: offer.v2,
+          }),
+          'Cache-Control': PAYMENT_REQUIRED_CACHE_CONTROL,
+        },
         body: {
-          x402Version: X402_VERSION,
+          x402Version: 1,
           error,
-          accepts: requirements,
+          accepts: offer.v1,
           ...(payer ? { payer } : {}),
         },
       },
     });
 
-    const header = request.header('X-PAYMENT');
-    if (!header) return reject('X-PAYMENT header is required');
+    const v1 = request.header('X-PAYMENT');
+    const v2 = request.header('PAYMENT-SIGNATURE');
+    if (v1 && v2) return reject('Send X-PAYMENT or PAYMENT-SIGNATURE, not both');
+    if (!v1 && !v2) return reject('X-PAYMENT or PAYMENT-SIGNATURE header is required');
 
-    let payload: PaymentPayloadV1;
-    try {
-      const decoded = PaymentPayloadV1Schema.safeParse(decodePaymentSignatureHeader(header));
-      if (!decoded.success) return reject('X-PAYMENT does not carry an x402 version 1 payment');
-      payload = decoded.data;
-    } catch {
-      // The parser's message quotes the bytes it choked on, which for a header
-      // that was never JSON are not text worth putting in a response body.
-      return reject('Invalid or malformed payment header');
-    }
-
-    const selected = requirements.find(
-      (candidate) => candidate.scheme === payload.scheme && candidate.network === payload.network,
-    );
-    if (!selected) return reject('Unable to find matching payment requirements');
+    const accepted = v1 ? readV1(v1, offer) : readV2(v2!, offer);
+    if (typeof accepted === 'string') return reject(accepted);
 
     try {
-      const response = await this.facilitator.verify(payload, selected);
+      const response = await this.facilitator.verify(accepted.payload, accepted.requirements);
       if (!response.isValid) {
         return reject(response.invalidReason ?? 'Payment verification failed', response.payer);
       }
@@ -253,7 +358,7 @@ export class PaymentService {
       return reject(error instanceof Error ? error.message : 'Payment verification failed');
     }
 
-    return { kind: 'accepted', accepted: { payload, requirements: selected } };
+    return { kind: 'accepted', accepted };
   }
 
   /**
@@ -264,7 +369,8 @@ export class PaymentService {
   async settle(accepted: PaymentAcceptance): Promise<Record<string, string>> {
     try {
       const response = await this.facilitator.settle(accepted.payload, accepted.requirements);
-      return { 'X-PAYMENT-RESPONSE': encodePaymentResponseHeader(response) };
+      const header = accepted.x402Version === 2 ? 'PAYMENT-RESPONSE' : 'X-PAYMENT-RESPONSE';
+      return { [header]: encodePaymentResponseHeader(response) };
     } catch (error) {
       this.logger.error(`settlement failed: ${error instanceof Error ? error.message : error}`);
       return {};
