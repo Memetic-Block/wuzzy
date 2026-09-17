@@ -12,6 +12,7 @@ import {
   listIndexes,
   NotPermittedError,
   PageCapError,
+  quote,
 } from './indexes';
 import { paidSearch, WalletRequiredError } from './search';
 import { createWallet, loadWallet, NoWalletError, walletPath } from './wallet';
@@ -40,10 +41,14 @@ const RESULT = {
   },
 };
 
+/** A header value as the API encodes one: base64 of the JSON. */
+const encoded = (value: unknown): string => Buffer.from(JSON.stringify(value)).toString('base64');
+
 /**
  * A Wuzzy endpoint that demands payment once and then serves. It answers the
- * shape the real API answers, so the client's 402 -> pay -> retry loop is
- * exercised for real; only the facilitator's judgement is stubbed out.
+ * shape the real API answers, both protocol versions in one 402, so the
+ * client's 402 -> pay -> retry loop is exercised for real; only the
+ * facilitator's judgement is stubbed out.
  */
 async function startEndpoint(options: { devMode?: boolean } = {}) {
   const seen: { paid: boolean }[] = [];
@@ -53,16 +58,39 @@ async function startEndpoint(options: { devMode?: boolean } = {}) {
       raw += chunk;
     });
     request.on('end', () => {
-      const payment = request.headers['x-payment'];
+      const payment = request.headers['payment-signature'];
       seen.push({ paid: Boolean(payment) });
       response.setHeader('content-type', 'application/json');
 
       if (!payment && !options.devMode) {
         response.statusCode = 402;
+        response.setHeader(
+          'payment-required',
+          encoded({
+            x402Version: 2,
+            error: 'X-PAYMENT or PAYMENT-SIGNATURE header is required',
+            resource: {
+              url: 'http://127.0.0.1/search',
+              description: 'One Wuzzy search query',
+              mimeType: 'application/json',
+            },
+            accepts: [
+              {
+                scheme: 'exact',
+                network: 'eip155:84532',
+                amount: '10000',
+                asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+                payTo: '0x2222222222222222222222222222222222222222',
+                maxTimeoutSeconds: 60,
+                extra: { name: 'USDC', version: '2' },
+              },
+            ],
+          }),
+        );
         response.end(
           JSON.stringify({
             x402Version: 1,
-            error: 'X-PAYMENT header is required',
+            error: 'X-PAYMENT or PAYMENT-SIGNATURE header is required',
             accepts: [
               {
                 scheme: 'exact',
@@ -84,15 +112,13 @@ async function startEndpoint(options: { devMode?: boolean } = {}) {
 
       if (payment) {
         response.setHeader(
-          'x-payment-response',
-          Buffer.from(
-            JSON.stringify({
-              success: true,
-              transaction: `0x${'d'.repeat(64)}`,
-              network: 'base-sepolia',
-              payer: '0x1111111111111111111111111111111111111111',
-            }),
-          ).toString('base64'),
+          'payment-response',
+          encoded({
+            success: true,
+            transaction: `0x${'d'.repeat(64)}`,
+            network: 'eip155:84532',
+            payer: '0x1111111111111111111111111111111111111111',
+          }),
         );
       }
       response.statusCode = 200;
@@ -209,7 +235,19 @@ describe('paid search', () => {
         network: 'base-sepolia',
         maxValue: 1n,
       }),
-    ).rejects.toThrow();
+    ).rejects.toThrow(/spendControls/);
+    // Refused before signing, so the endpoint only ever saw the unpaid ask.
+    expect(endpoint.seen.map((request) => request.paid)).toEqual([false]);
+  });
+
+  it('reads a quote from the 402 without paying it', async () => {
+    const endpoint = await startEndpoint();
+
+    const priced = await quote(endpoint.url, { query: 'deploy' });
+    expect(priced?.atomic).toBe(10_000n);
+    expect(priced?.usd).toBe('$0.01');
+    expect(priced?.network).toBe('eip155:84532');
+    expect(endpoint.seen.map((request) => request.paid)).toEqual([false]);
   });
 });
 
@@ -224,7 +262,7 @@ async function startIndexApi() {
     request.on('end', () => {
       const path = (request.url ?? '/').split('?')[0] ?? '/';
       const body = raw === '' ? {} : JSON.parse(raw);
-      const paid = Boolean(request.headers['x-payment']);
+      const paid = Boolean(request.headers['payment-signature']);
       requests.push({ path, body, paid });
       response.setHeader('content-type', 'application/json');
 

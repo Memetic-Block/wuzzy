@@ -1,6 +1,12 @@
 import type { Hex } from 'viem';
-import { createSigner, decodeXPaymentResponse, wrapFetchWithPayment } from 'x402-fetch';
-import { DEFAULT_MAX_VALUE, type Settlement } from './search';
+import { decodePaymentRequiredHeader } from '@x402/core/http';
+import {
+  DEFAULT_MAX_VALUE,
+  payingFetch,
+  settlementOf,
+  type Network,
+  type Settlement,
+} from './search';
 
 export interface IndexSummary {
   readonly id: string;
@@ -35,7 +41,7 @@ export interface CommissionOptions {
   readonly readPolicy?: 'open' | 'allowlist';
   readonly allowlist?: readonly string[];
   readonly privateKey?: Hex;
-  readonly network?: 'base' | 'base-sepolia';
+  readonly network?: Network;
   readonly maxValue?: bigint;
   readonly fetchImpl?: typeof globalThis.fetch;
   /** Only used when the endpoint is in dev mode and there is no payer. */
@@ -74,20 +80,22 @@ export async function quote(
   });
   if (response.status !== 402) return null;
 
-  const envelope = (await response.json()) as {
-    accepts?: { maxAmountRequired?: string; payTo?: string; network?: string; description?: string }[];
-  };
-  const accepted = envelope.accepts?.[0];
-  if (!accepted?.maxAmountRequired) return null;
+  // x402 version 2 carries the requirements in a header, so the body is not
+  // read at all.
+  const header = response.headers.get('payment-required');
+  if (!header) return null;
+  const required = decodePaymentRequiredHeader(header);
+  const accepted = required.accepts[0];
+  if (!accepted?.amount) return null;
 
-  const atomic = BigInt(accepted.maxAmountRequired);
+  const atomic = BigInt(accepted.amount);
   return {
     atomic,
     // USDC is six decimals wherever it is deployed.
     usd: `$${(Number(atomic) / 1_000_000).toFixed(2)}`,
-    payTo: accepted.payTo ?? '',
-    network: accepted.network ?? '',
-    description: accepted.description ?? '',
+    payTo: accepted.payTo,
+    network: accepted.network,
+    description: required.resource.description ?? '',
   };
 }
 
@@ -189,17 +197,13 @@ async function post(
 
   if (!options.privateKey) return baseFetch(url, request);
 
-  const signer = await createSigner(options.network ?? 'base', options.privateKey);
-  const paying = wrapFetchWithPayment(baseFetch, signer, options.maxValue ?? DEFAULT_MAX_VALUE);
+  const paying = payingFetch(
+    baseFetch,
+    options.privateKey,
+    options.network ?? 'base',
+    options.maxValue ?? DEFAULT_MAX_VALUE,
+  );
   return paying(url, request);
-}
-
-function settlementOf(response: Response): { settlement: Settlement | null; paid: boolean } {
-  const header = response.headers.get('x-payment-response');
-  return {
-    settlement: header ? (decodeXPaymentResponse(header) as Settlement) : null,
-    paid: header !== null,
-  };
 }
 
 async function readJson(response: Response): Promise<unknown> {

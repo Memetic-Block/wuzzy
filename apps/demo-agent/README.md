@@ -25,10 +25,15 @@ index always needs one, funded or not, because an index has an owner.
 
 1. The client POSTs to `/search` with no payment.
 2. The endpoint answers **402** with x402 payment requirements: price, asset, and the
-   address to pay.
-3. `x402-fetch` signs a payment authorization with your wallet and retries.
+   address to pay. Version 2 of the protocol carries them in the `PAYMENT-REQUIRED` header;
+   the body carries the same quote for version 1 clients.
+3. [`@x402/fetch`](https://www.npmjs.com/package/@x402/fetch) signs a payment authorization
+   with your wallet and retries with it in `PAYMENT-SIGNATURE`.
 4. The endpoint verifies with the facilitator, runs the query, settles, and returns results
-   with an `X-PAYMENT-RESPONSE` header.
+   with a `PAYMENT-RESPONSE` header.
+
+The payment code is [`payingFetch` in search.ts](src/search.ts): one `exact` scheme on Base,
+named by its CAIP-2 id `eip155:8453`, and a spend ceiling.
 
 Each result carries a provenance block, so you can check what you bought rather than trust
 it:
