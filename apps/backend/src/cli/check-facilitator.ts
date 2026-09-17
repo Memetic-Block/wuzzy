@@ -16,13 +16,22 @@
  */
 import { buildPaymentConfig } from '../payment/payment.config';
 import { createFacilitatorConfig } from '@coinbase/x402';
+import { EVM_NETWORK_CHAIN_ID_MAP } from '@x402/evm/v1';
 
 const config = buildPaymentConfig();
 const url = config.facilitatorUrl;
 const isCoinbase = url.startsWith('https://api.cdp.coinbase.com/');
 
+// Every 402 quotes the network twice: by its v1 name and by its CAIP-2 id.
+const chainId = (EVM_NETWORK_CHAIN_ID_MAP as Record<string, number>)[config.network];
+if (chainId === undefined) {
+  console.error(`\nX402_NETWORK must be an EVM network, got "${config.network}".`);
+  process.exit(1);
+}
+const quoted = { 1: config.network, 2: `eip155:${chainId}` } as const;
+
 console.log(`facilitator  ${url}`);
-console.log(`network      ${config.network}`);
+console.log(`network      ${quoted[1]} (x402 v1), ${quoted[2]} (x402 v2)`);
 
 let headers: Record<string, string> = {};
 if (isCoinbase) {
@@ -52,23 +61,32 @@ if (!response.ok) {
   process.exit(1);
 }
 
-const body = (await response.json()) as { kinds?: { scheme?: string; network?: string }[] };
+const body = (await response.json()) as {
+  kinds?: { x402Version?: number; scheme?: string; network?: string }[];
+};
 const kinds = body.kinds ?? [];
 const networks = [...new Set(kinds.map((k) => k.network ?? '?'))].sort();
 
-// Base mainnet appears either as its CAIP-2 id or by name, depending on which
-// version of the protocol the facilitator answers with.
-const MAINNET = ['eip155:8453', 'base'];
-const settlesBase = networks.some((n) => MAINNET.includes(n));
-const exactOnBase = kinds.some((k) => k.scheme === 'exact' && MAINNET.includes(k.network ?? ''));
+// A kind is a version, a scheme and a network together. A facilitator can
+// settle `exact` on a chain in one protocol version and not the other, and the
+// public one at x402.org does exactly that for its testnets.
+const settles = (version: 1 | 2) =>
+  kinds.some(
+    (k) => k.x402Version === version && k.scheme === 'exact' && k.network === quoted[version],
+  );
+const missing = ([1, 2] as const).filter((version) => !settles(version));
 
 console.log(`\nnetworks     ${networks.join(', ')}`);
-console.log(`base mainnet ${settlesBase ? 'yes' : 'NO'}`);
-console.log(`exact scheme ${exactOnBase ? 'yes' : 'NO'}`);
+console.log(`exact v1     ${settles(1) ? 'yes' : 'NO'}`);
+console.log(`exact v2     ${settles(2) ? 'yes' : 'NO'}`);
 
-if (!settlesBase || !exactOnBase) {
-  console.error('\nThis facilitator cannot settle an exact payment on Base mainnet.');
-  console.error('Every quote it backs would be unpayable. Do not meter against it.');
+if (missing.length > 0) {
+  // Both versions are offered in every 402, so a version this facilitator
+  // cannot settle is a payer who signs and is then turned away.
+  const versions = missing.map((version) => `v${version} on ${quoted[version]}`).join(' or ');
+  const those = missing.length > 1 ? 'those versions' : 'that version';
+  console.error(`\nThis facilitator cannot settle an exact payment in x402 ${versions}.`);
+  console.error(`Every quote it backs in ${those} would be unpayable. Do not meter against it.`);
   process.exit(1);
 }
-console.log('\nOK: this facilitator can settle what we quote.');
+console.log('\nOK: this facilitator can settle what we quote, in both versions.');

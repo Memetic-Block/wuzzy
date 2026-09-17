@@ -32,7 +32,14 @@ Bun.serve({
       });
     }
     if (path === '/supported') {
-      return Response.json({ kinds: [{ scheme: 'exact', network: 'base-sepolia' }] });
+      return Response.json({
+        kinds: [
+          { x402Version: 1, scheme: 'exact', network: 'base-sepolia' },
+          { x402Version: 2, scheme: 'exact', network: 'eip155:84532' },
+        ],
+        extensions: [],
+        signers: {},
+      });
     }
     return new Response('{}', { status: 404 });
   },

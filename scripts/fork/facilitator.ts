@@ -95,27 +95,62 @@ interface Authorization {
   readonly nonce: string;
 }
 
+/** Requirements as either protocol version states them. */
+interface Requirements {
+  scheme?: string;
+  network?: string;
+  /** v1's name for the amount. */
+  maxAmountRequired?: string;
+  /** v2's name for the same thing. */
+  amount?: string;
+  payTo?: string;
+  asset?: string;
+}
+
 interface Body {
   paymentPayload?: {
+    x402Version?: number;
+    /** v1 puts the scheme and network on the payment itself. */
     scheme?: string;
     network?: string;
+    /** v2 names the requirements it accepted instead. */
+    accepted?: Requirements;
     payload?: {
       signature?: string;
       authorization?: Authorization;
     };
   };
-  paymentRequirements?: { maxAmountRequired?: string; payTo?: string; asset?: string };
+  paymentRequirements?: Requirements;
+}
+
+/**
+ * What is being paid for, read the same way whichever x402 version the payment
+ * came in. The versions put the scheme in different places and call the amount
+ * different things, and a check keyed on one version's field names reads the
+ * other's as absent. That is how an amount check gets skipped rather than
+ * failed, so every field is read here once and every check below requires it.
+ */
+function termsOf(body: Body) {
+  const payment = body.paymentPayload;
+  const need = body.paymentRequirements ?? {};
+  return {
+    scheme: payment?.accepted?.scheme ?? payment?.scheme,
+    network: need.network ?? 'base',
+    amount: need.amount ?? need.maxAmountRequired,
+    payTo: need.payTo,
+    asset: need.asset,
+  };
 }
 
 /** Everything that must hold before a cent moves, in the order it can be checked. */
 async function check(body: Body): Promise<{ payer: string } | { reason: string; payer: string }> {
   const payment = body.paymentPayload;
-  const need = body.paymentRequirements ?? {};
+  const terms = termsOf(body);
   const auth = payment?.payload?.authorization;
   const signature = payment?.payload?.signature;
   const payer = auth?.from ?? '';
 
-  if (payment?.scheme !== 'exact') return { reason: 'unsupported_scheme', payer };
+  if (terms.scheme !== 'exact') return { reason: 'unsupported_scheme', payer };
   if (!auth || !signature) return { reason: 'invalid_exact_evm_payload_authorization', payer };
 
   const value = {
@@ -137,13 +172,13 @@ async function check(body: Body): Promise<{ payer: string } | { reason: string; 
     return { reason: 'invalid_exact_evm_payload_signature', payer };
   }
 
-  if (need.asset && need.asset.toLowerCase() !== USDC.toLowerCase()) {
+  if (terms.asset?.toLowerCase() !== USDC.toLowerCase()) {
     return { reason: 'invalid_exact_evm_payload_asset', payer };
   }
-  if (need.payTo && String(auth.to).toLowerCase() !== need.payTo.toLowerCase()) {
+  if (!terms.payTo || String(auth.to).toLowerCase() !== terms.payTo.toLowerCase()) {
     return { reason: 'invalid_exact_evm_payload_recipient_mismatch', payer };
   }
-  if (need.maxAmountRequired && value.value < BigInt(need.maxAmountRequired)) {
+  if (!terms.amount || value.value < BigInt(terms.amount)) {
     return { reason: 'insufficient_funds', payer };
   }
 
@@ -167,10 +202,17 @@ Bun.serve({
   async fetch(request) {
     const path = new URL(request.url).pathname;
     const body = (await request.json().catch(() => ({}))) as Body;
-    const network = body.paymentPayload?.network ?? 'base';
+    const { network } = termsOf(body);
 
     if (path === '/supported') {
-      return Response.json({ kinds: [{ scheme: 'exact', network: 'base' }] });
+      return Response.json({
+        kinds: [
+          { x402Version: 1, scheme: 'exact', network: 'base' },
+          { x402Version: 2, scheme: 'exact', network: `eip155:${chainId}` },
+        ],
+        extensions: [],
+        signers: { 'eip155:*': [relayer.address] },
+      });
     }
 
     if (path === '/verify') {
