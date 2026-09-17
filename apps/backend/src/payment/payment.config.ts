@@ -1,11 +1,10 @@
-import type { Network } from 'x402/types';
-
 export interface PaymentConfig {
   /** When false, /search is open. Only ever set false in development. */
   readonly enabled: boolean;
   /** Receiving address. A fresh address, funded by nobody, holding no keys here. */
   readonly payTo: string;
-  readonly network: Network;
+  /** The x402 v1 network name, e.g. "base". */
+  readonly network: string;
   /** Price per query, as a USD string the x402 helpers parse, e.g. "$0.01". */
   readonly price: string;
   readonly facilitatorUrl: string;
@@ -39,7 +38,7 @@ export function buildPaymentConfig(
     // accidentally give the index away.
     enabled: env.X402_ENABLED !== 'false',
     payTo: env.X402_PAY_TO ?? '0x0000000000000000000000000000000000000000',
-    network: (env.X402_NETWORK ?? 'base') as Network,
+    network: env.X402_NETWORK ?? 'base',
     price: env.X402_PRICE ?? '$0.01',
     facilitatorUrl: env.X402_FACILITATOR_URL ?? DEFAULT_FACILITATOR,
     cdpApiKeyId: env.X402_CDP_API_KEY_ID,

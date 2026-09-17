@@ -4,7 +4,7 @@ import { Test } from '@nestjs/testing';
 import type { INestApplication } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { getDataSourceToken } from '@nestjs/typeorm';
-import { exact } from 'x402/schemes';
+import { safeBase64Encode } from '@x402/core/utils';
 import { ChunkEntity } from '../database/chunk.entity';
 import { DocumentEntity } from '../database/document.entity';
 import { buildDataSourceOptions } from '../database/typeorm.config';
@@ -176,22 +176,24 @@ const post = (url: string, body: unknown, headers: Record<string, string> = {}) 
 
 /** A well-formed X-PAYMENT header; the mock facilitator decides if it is valid. */
 const paymentHeader = (): string =>
-  exact.evm.encodePayment({
-    x402Version: 1,
-    scheme: 'exact',
-    network: 'base',
-    payload: {
-      signature: `0x${'1'.repeat(130)}`,
-      authorization: {
-        from: '0x1111111111111111111111111111111111111111',
-        to: PAY_TO,
-        value: '10000',
-        validAfter: '0',
-        validBefore: String(Math.floor(Date.now() / 1000) + 3600),
-        nonce: `0x${'2'.repeat(64)}`,
+  safeBase64Encode(
+    JSON.stringify({
+      x402Version: 1,
+      scheme: 'exact',
+      network: 'base',
+      payload: {
+        signature: `0x${'1'.repeat(130)}`,
+        authorization: {
+          from: '0x1111111111111111111111111111111111111111',
+          to: PAY_TO,
+          value: '10000',
+          validAfter: '0',
+          validBefore: String(Math.floor(Date.now() / 1000) + 3600),
+          nonce: `0x${'2'.repeat(64)}`,
+        },
       },
-    },
-  });
+    }),
+  );
 
 describe('x402-metered search', () => {
   scenario('unpaid request receives payment requirements', async () => {

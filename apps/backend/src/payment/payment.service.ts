@@ -1,15 +1,16 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { getAddress } from 'viem';
-import { exact } from 'x402/schemes';
-import { findMatchingPaymentRequirements, processPriceToAtomicAmount, toJsonSafe } from 'x402/shared';
-import {
-  SupportedEVMNetworks,
-  settleResponseHeader,
-  type PaymentPayload,
-  type PaymentRequirements,
-} from 'x402/types';
 import { createFacilitatorConfig } from '@coinbase/x402';
-import { useFacilitator } from 'x402/verify';
+import { decodePaymentSignatureHeader, encodePaymentResponseHeader } from '@x402/core/http';
+import {
+  PaymentPayloadV1Schema,
+  type PaymentPayloadV1,
+  type PaymentRequirementsV1,
+} from '@x402/core/schemas';
+import { HTTPFacilitatorClient, type FacilitatorConfig } from '@x402/core/server';
+import { VerifyError, type SettleResponse, type VerifyResponse } from '@x402/core/types';
+import { ExactEvmScheme } from '@x402/evm/exact/server';
+import { EVM_NETWORK_CHAIN_ID_MAP } from '@x402/evm/v1';
 import { PAYMENT_CONFIG, type PaymentConfig } from './payment.config';
 
 export const X402_VERSION = 1;
@@ -25,8 +26,8 @@ export interface PaymentRejection {
 }
 
 export interface PaymentAcceptance {
-  readonly payload: PaymentPayload;
-  readonly requirements: PaymentRequirements;
+  readonly payload: PaymentPayloadV1;
+  readonly requirements: PaymentRequirementsV1;
 }
 
 /**
@@ -102,8 +103,8 @@ export type PaymentOutcome =
  * to it, so the two cases are kept apart here rather than merged behind an
  * optional field.
  */
-function facilitatorFor(config: PaymentConfig): Parameters<typeof useFacilitator>[0] {
-  const url = config.facilitatorUrl as `${string}://${string}`;
+function facilitatorFor(config: PaymentConfig): FacilitatorConfig {
+  const url = config.facilitatorUrl;
   const isCoinbase = url.startsWith('https://api.cdp.coinbase.com/');
 
   if (!isCoinbase) return { url };
@@ -119,64 +120,71 @@ function facilitatorFor(config: PaymentConfig): Parameters<typeof useFacilitator
         'authenticate. Note that the public one at x402.org settles testnets only.',
     );
   }
-  // Their config is typed against x402 v2 while this app is on v1, and the two
-  // disagree only about whether `url` may be undefined. Keeping the URL this
-  // app already validated and borrowing only the request signing avoids
-  // casting one whole config into the shape of another.
-  const cdp = createFacilitatorConfig(config.cdpApiKeyId, config.cdpApiKeySecret);
-  return {
-    url,
-    // v2 returns each set of headers as optional and v1 requires all three.
-    // An absent set means "add nothing", which is what the caller does with
-    // it: every one is spread into the request headers.
-    createAuthHeaders: async () => {
-      const signed = (await cdp.createAuthHeaders?.()) ?? {};
-      return {
-        verify: signed.verify ?? {},
-        settle: signed.settle ?? {},
-        supported: signed.supported ?? {},
-      };
-    },
-  };
+  // Keep the URL this app already validated and borrow only the request
+  // signing: their config leaves `url` optional and would fall back to a
+  // default of its own.
+  const { createAuthHeaders } = createFacilitatorConfig(config.cdpApiKeyId, config.cdpApiKeySecret);
+  return { url, createAuthHeaders };
+}
+
+/**
+ * The facilitator client is typed for x402 v2 payloads, but it posts whatever
+ * it is given and names the protocol version the payload itself carries, which
+ * is all a facilitator needs to verify a v1 payment.
+ */
+interface Facilitator {
+  verify(payload: PaymentPayloadV1, requirements: PaymentRequirementsV1): Promise<VerifyResponse>;
+  settle(payload: PaymentPayloadV1, requirements: PaymentRequirementsV1): Promise<SettleResponse>;
+}
+
+/**
+ * The CAIP-2 identifier for a v1 network name. Only EVM networks carry the
+ * EIP-712 domain a client needs in order to sign an `exact` payment, so a name
+ * with no chain id is a configuration error rather than a network to skip.
+ */
+function chainOf(network: string): `eip155:${number}` {
+  const chainId = (EVM_NETWORK_CHAIN_ID_MAP as Record<string, number>)[network];
+  if (chainId === undefined) {
+    throw new Error(`X402_NETWORK must be an EVM network, got "${network}"`);
+  }
+  return `eip155:${chainId}`;
 }
 
 @Injectable()
 export class PaymentService {
   private readonly logger = new Logger(PaymentService.name);
-  private readonly facilitator: ReturnType<typeof useFacilitator>;
+  private readonly facilitator: Facilitator;
+  private readonly chain: `eip155:${number}`;
+  private readonly exact = new ExactEvmScheme();
 
   constructor(@Inject(PAYMENT_CONFIG) private readonly config: PaymentConfig) {
-    this.facilitator = useFacilitator(facilitatorFor(config));
+    this.facilitator = new HTTPFacilitatorClient(facilitatorFor(config)) as unknown as Facilitator;
+    this.chain = chainOf(config.network);
   }
 
   get enabled(): boolean {
     return this.config.enabled;
   }
 
-  buildRequirements(resourceUrl: string, quote?: PriceQuote): PaymentRequirements[] {
-    const atomic = processPriceToAtomicAmount(quote?.price ?? this.config.price, this.config.network);
-    if ('error' in atomic) throw new Error(atomic.error);
-    const { maxAmountRequired, asset } = atomic;
-
-    // Base is EVM, and only EVM assets carry the EIP-712 domain a client needs
-    // in order to sign an `exact` payment.
-    if (!SupportedEVMNetworks.includes(this.config.network)) {
-      throw new Error(`X402_NETWORK must be an EVM network, got "${this.config.network}"`);
-    }
+  async buildRequirements(resourceUrl: string, quote?: PriceQuote): Promise<PaymentRequirementsV1[]> {
+    const { amount, asset, extra } = await this.exact.parsePrice(
+      quote?.price ?? this.config.price,
+      this.chain,
+    );
 
     return [
       {
         scheme: 'exact',
         network: this.config.network,
-        maxAmountRequired,
-        resource: resourceUrl as `${string}://${string}`,
+        maxAmountRequired: amount,
+        resource: resourceUrl,
         description: quote?.description ?? this.config.description,
         mimeType: 'application/json',
         payTo: getAddress(this.config.payTo),
         maxTimeoutSeconds: 60,
-        asset: getAddress(asset.address),
+        asset: getAddress(asset),
         outputSchema: { input: { type: 'http', method: 'POST', discoverable: true } },
-        extra: 'eip712' in asset ? asset.eip712 : undefined,
+        extra: extra ?? {},
       },
     ];
   }
@@ -189,7 +197,7 @@ export class PaymentService {
   ): Promise<PaymentOutcome> {
     if (!this.config.enabled) return { kind: 'open' };
 
-    const requirements = this.buildRequirements(resourceUrl, quote);
+    const requirements = await this.buildRequirements(resourceUrl, quote);
     const reject = (error: string, payer?: string): PaymentOutcome => ({
       kind: 'rejected',
       rejection: {
@@ -197,7 +205,7 @@ export class PaymentService {
         body: {
           x402Version: X402_VERSION,
           error,
-          accepts: toJsonSafe(requirements),
+          accepts: requirements,
           ...(payer ? { payer } : {}),
         },
       },
@@ -205,15 +213,20 @@ export class PaymentService {
 
     if (!header) return reject('X-PAYMENT header is required');
 
-    let payload: PaymentPayload;
+    let payload: PaymentPayloadV1;
     try {
-      payload = exact.evm.decodePayment(header);
-      payload.x402Version = X402_VERSION;
-    } catch (error) {
-      return reject(error instanceof Error ? error.message : 'Invalid or malformed payment header');
+      const decoded = PaymentPayloadV1Schema.safeParse(decodePaymentSignatureHeader(header));
+      if (!decoded.success) return reject('X-PAYMENT does not carry an x402 version 1 payment');
+      payload = decoded.data;
+    } catch {
+      // The parser's message quotes the bytes it choked on, which for a header
+      // that was never JSON are not text worth putting in a response body.
+      return reject('Invalid or malformed payment header');
     }
 
-    const selected = findMatchingPaymentRequirements(requirements, payload);
+    const selected = requirements.find(
+      (candidate) => candidate.scheme === payload.scheme && candidate.network === payload.network,
+    );
     if (!selected) return reject('Unable to find matching payment requirements');
 
     try {
@@ -222,6 +235,10 @@ export class PaymentService {
         return reject(response.invalidReason ?? 'Payment verification failed', response.payer);
       }
     } catch (error) {
+      // A facilitator that refuses with a non-200 still names its reason.
+      if (error instanceof VerifyError) {
+        return reject(error.invalidReason ?? error.message, error.payer);
+      }
       return reject(error instanceof Error ? error.message : 'Payment verification failed');
     }
 
@@ -235,7 +252,7 @@ export class PaymentService {
   async settle(accepted: PaymentAcceptance): Promise<string | null> {
     try {
       const response = await this.facilitator.settle(accepted.payload, accepted.requirements);
-      return settleResponseHeader(response);
+      return encodePaymentResponseHeader(response);
     } catch (error) {
       this.logger.error(`settlement failed: ${error instanceof Error ? error.message : error}`);
       return null;

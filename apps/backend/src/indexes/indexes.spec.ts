@@ -8,7 +8,7 @@ import { getQueueToken } from '@nestjs/bullmq';
 import type { Job } from 'bullmq';
 import type { INestApplication } from '@nestjs/common';
 import { DataSource } from 'typeorm';
-import { exact } from 'x402/schemes';
+import { safeBase64Encode } from '@x402/core/utils';
 import { SCHEMA_DEFINITION, encodeAttestation, schemaCarriesNoIndex } from '../attest/schema';
 import { page, PROSE, startMockSite, type MockSite } from '../crawl/mock-site';
 import { ChunkEntity } from '../database/chunk.entity';
@@ -222,22 +222,24 @@ async function boot(source: DataSource, overrides: Partial<PaymentConfig> = {}) 
 
 /** A well-formed X-PAYMENT header from a given wallet; the facilitator judges it. */
 const paymentHeader = (from: string, value = '10000'): string =>
-  exact.evm.encodePayment({
-    x402Version: 1,
-    scheme: 'exact',
-    network: 'base',
-    payload: {
-      signature: `0x${'1'.repeat(130)}`,
-      authorization: {
-        from,
-        to: PAY_TO,
-        value,
-        validAfter: '0',
-        validBefore: String(Math.floor(Date.now() / 1000) + 3600),
-        nonce: `0x${'2'.repeat(64)}`,
+  safeBase64Encode(
+    JSON.stringify({
+      x402Version: 1,
+      scheme: 'exact',
+      network: 'base',
+      payload: {
+        signature: `0x${'1'.repeat(130)}`,
+        authorization: {
+          from,
+          to: PAY_TO,
+          value,
+          validAfter: '0',
+          validBefore: String(Math.floor(Date.now() / 1000) + 3600),
+          nonce: `0x${'2'.repeat(64)}`,
+        },
       },
-    },
-  });
+    }),
+  );
 
 const send = (
   url: string,
