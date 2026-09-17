@@ -39,11 +39,18 @@ carries the meaning.
 keys: a signed payment is the only credential, over
 [x402](https://x402.org). The sequence mirrors the reference `x402-express` middleware.
 
-1. Call without an `X-PAYMENT` header. The server answers **402** with an `accepts` array
-   describing what it will take.
-2. Sign an authorization matching one entry and retry with it base64 encoded in `X-PAYMENT`.
+Both versions of the protocol are answered, so a client on either can pay without being told
+which one this server speaks.
+
+1. Call without a payment. The server answers **402** with what it will take, stated once per
+   version: version 2 requirements base64 encoded in the `PAYMENT-REQUIRED` header, and
+   version 1 requirements as an `accepts` array in the body. Both quote the same amount, asset
+   and pay-to address, because they are built from one parsed price.
+2. Sign an authorization for one of them and retry with it base64 encoded in that version's
+   header: `PAYMENT-SIGNATURE` for version 2, `X-PAYMENT` for version 1. A payment in the other
+   version's header, or a request carrying both, is refused before the facilitator sees it.
 3. The server verifies with the facilitator, runs the handler, and only then settles,
-   returning an `X-PAYMENT-RESPONSE` header.
+   returning `PAYMENT-RESPONSE` or `X-PAYMENT-RESPONSE` in the version the payment used.
 
 Two ordering guarantees are deliberate and covered by scenarios:
 
@@ -58,7 +65,7 @@ A 402 body looks like this:
 ```json
 {
   "x402Version": 1,
-  "error": "X-PAYMENT header is required",
+  "error": "X-PAYMENT or PAYMENT-SIGNATURE header is required",
   "accepts": [
     {
       "scheme": "exact",
@@ -75,6 +82,34 @@ A 402 body looks like this:
   ]
 }
 ```
+
+and its `PAYMENT-REQUIRED` header decodes to the same quote in version 2, which names the
+network by its CAIP-2 id and states the resource once rather than per entry:
+
+```json
+{
+  "x402Version": 2,
+  "error": "X-PAYMENT or PAYMENT-SIGNATURE header is required",
+  "resource": {
+    "url": "https://api.wuzzy.io/search",
+    "description": "One Wuzzy search query with onchain provenance",
+    "mimeType": "application/json"
+  },
+  "accepts": [
+    {
+      "scheme": "exact",
+      "network": "eip155:84532",
+      "amount": "10000",
+      "asset": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+      "payTo": "0x2222222222222222222222222222222222222222",
+      "maxTimeoutSeconds": 60,
+      "extra": { "name": "USDC", "version": "2" }
+    }
+  ]
+}
+```
+
+`X402_NETWORK` stays a version 1 name such as `base`; the CAIP-2 id is derived from it.
 
 Setting `X402_ENABLED=false` opens every metered route. That is a development-only switch:
 with no payer there is also no allowlist enforcement, because there is no wallet to check.
@@ -99,7 +134,7 @@ Metered search. Scoped to one index, always: an absent `index` resolves to the g
 ```sh
 curl -X POST https://api.wuzzy.io/search \
   -H 'content-type: application/json' \
-  -H "X-PAYMENT: $PAYMENT" \
+  -H "PAYMENT-SIGNATURE: $PAYMENT" \
   -d '{"query":"base batches","topK":1}'
 ```
 
@@ -303,7 +338,7 @@ Owner only. Removes membership and the index row; **the underlying documents are
 because other indexes may hold them and the provenance trail is append-only regardless.
 
 Deletion is free, so nothing is settled and there is nothing to refund. It still requires a
-valid `X-PAYMENT`, purely as a signature proving who is asking.
+valid payment in either version's header, purely as a signature proving who is asking.
 
 ## Commissioned crawls do not discover
 
