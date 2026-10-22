@@ -1,8 +1,3 @@
-# The deployed version is written into this file rather than passed in: the
-# cluster's Nomad does not support HCL2 variables. `operations/stamp-sha.sh`
-# rewrites it across every spec at once, which is safer than editing them one
-# at a time and ending up with a half-upgraded deployment.
-
 # Crawl then embed, on a schedule.
 #
 # The stages are CLI commands rather than queue workers, so this is a periodic
@@ -39,7 +34,7 @@ job "wuzzy-pipeline" {
       driver = "docker"
 
       config {
-        image      = "ghcr.io/memetic-block/wuzzy-backend:sha-368bc7d6bb996353feb207a3d6071e6feedaa9fc"
+        image      = "ghcr.io/memetic-block/wuzzy-backend:sha-5f4aeea4a96cbe10b6eba378fcb594f5063ec511"
         entrypoint = ["/bin/sh", "-c"]
         # Not `set -e`. Embedding what the crawl landed is worth doing even
         # when the crawl itself reports a problem, and chaining them meant one

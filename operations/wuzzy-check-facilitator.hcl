@@ -1,8 +1,3 @@
-# The deployed version is written into this file rather than passed in: the
-# cluster's Nomad does not support HCL2 variables. `operations/stamp-sha.sh`
-# rewrites it across every spec at once, which is safer than editing them one
-# at a time and ending up with a half-upgraded deployment.
-
 # Asks the facilitator whether it can settle what the API quotes, then exits.
 #
 # Every 402 offers x402 version 1 and version 2, so this passes only when the
@@ -47,7 +42,7 @@ job "wuzzy-check-facilitator" {
       driver = "docker"
 
       config {
-        image = "ghcr.io/memetic-block/wuzzy-backend:sha-368bc7d6bb996353feb207a3d6071e6feedaa9fc"
+        image = "ghcr.io/memetic-block/wuzzy-backend:sha-5f4aeea4a96cbe10b6eba378fcb594f5063ec511"
 
         work_dir = "/app"
         command  = "bun"

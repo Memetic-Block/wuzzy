@@ -1,8 +1,3 @@
-# The deployed version is written into this file rather than passed in: the
-# cluster's Nomad does not support HCL2 variables. `operations/stamp-sha.sh`
-# rewrites it across every spec at once, which is safer than editing them one
-# at a time and ending up with a half-upgraded deployment.
-
 # Writes the onchain receipts. The only long-running job that spends money.
 #
 # **count = 1, and it is not a tuning knob.** Every batch is a transaction from
@@ -50,7 +45,7 @@ job "wuzzy-attester" {
       driver = "docker"
 
       config {
-        image      = "ghcr.io/memetic-block/wuzzy-backend:sha-368bc7d6bb996353feb207a3d6071e6feedaa9fc"
+        image      = "ghcr.io/memetic-block/wuzzy-backend:sha-5f4aeea4a96cbe10b6eba378fcb594f5063ec511"
         entrypoint = ["/bin/sh", "-c"]
         args       = ["bun apps/backend/src/attester.ts"]
       }

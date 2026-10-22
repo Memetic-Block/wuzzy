@@ -1,8 +1,3 @@
-# The deployed version is written into this file rather than passed in: the
-# cluster's Nomad does not support HCL2 variables. `operations/stamp-sha.sh`
-# rewrites it across every spec at once, which is safer than editing them one
-# at a time and ending up with a half-upgraded deployment.
-
 # The public site. Static HTML rendered at deploy time and pushed to Cloudflare
 # Pages, so nothing of ours serves wuzzy.io.
 #
@@ -30,7 +25,7 @@ job "wuzzy-frontend-static-stage" {
       driver = "docker"
 
       config {
-        image = "ghcr.io/memetic-block/wuzzy-frontend-deploy:sha-368bc7d6bb996353feb207a3d6071e6feedaa9fc"
+        image = "ghcr.io/memetic-block/wuzzy-frontend-deploy:sha-5f4aeea4a96cbe10b6eba378fcb594f5063ec511"
       }
 
       env {
@@ -40,7 +35,7 @@ job "wuzzy-frontend-static-stage" {
         # dashboard before trusting a stage deploy: a mismatch does not fail, it
         # quietly publishes to a preview URL instead.
         PAGES_BRANCH  = "main"
-        COMMIT_SHA    = "368bc7d6bb996353feb207a3d6071e6feedaa9fc"
+        COMMIT_SHA    = "5f4aeea4a96cbe10b6eba378fcb594f5063ec511"
 
         # Read by apps/frontend/src/site.config.ts while the pages render.
         SITE_ORIGIN     = "https://stage.wuzzy.io"

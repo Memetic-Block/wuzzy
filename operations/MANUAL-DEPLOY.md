@@ -15,28 +15,22 @@ the cluster, the same arrangement as `wuzzy-site`.
       docker manifest inspect ghcr.io/memetic-block/wuzzy-backend:sha-<sha>
 
   CI publishes `sha-<full sha>` and, for master, `latest`. It never publishes a bare sha, so
-  the job specs add the `sha-` prefix themselves, so `stamp-sha.sh` takes a plain git sha.
+  an image tag in a spec is `sha-` followed by the full 40-character commit sha.
 
   CI only publishes on a successful run, so a commit whose workflow failed has no image and
   cannot be deployed.
 
-## Stamping the version
+## Updating the version
 
-**The cluster's Nomad does not support HCL2 variables**, so there is no `-var` at submit time
-and the specs carry the image tag literally. Set it across all of them at once:
-
-    ./operations/stamp-sha.sh                      # tip of origin/master
-    ./operations/stamp-sha.sh <full-40-char-sha>   # a specific build
-
-It rewrites every one of those sites at once, which is the reason it exists: stamping them by hand
-is how half a deployment ends up on one build and half on another. The sha appears twice per
-frontend spec, because it selects the image and is also reported by the rendered page.
+The specs carry the image tag literally. To deploy a build, replace the sha in every spec with
+that build's full sha, so no job is left on an older one. The frontend specs carry it twice,
+because it selects the image and is also reported by the rendered page.
 
 Commit the result. The specs are then a record of what is deployed, and a deploy is a diff
-someone can read rather than a flag someone remembered to pass.
+someone can read.
 
-Submitting from the Nomad UI works the same way: stamp, then paste the file in. That is the
-usual path for a manual deploy here.
+Submitting from the Nomad UI works the same way: update the sha, then paste the file in. That
+is the usual path for a manual deploy here.
 
 ## Order matters on a first deploy
 
