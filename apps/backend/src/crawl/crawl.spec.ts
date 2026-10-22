@@ -402,6 +402,35 @@ describe('failed fetches leave a trail', () => {
       `${mock.origin}/`,
     ]);
   });
+
+  scenario('a response in an encoding the crawler did not ask for is not decoded', async () => {
+    const source = db();
+    if (!source) return;
+
+    const mock = await site({
+      '/robots.txt': ROBOTS_ALLOW_ALL,
+      '/': page('Home', PROSE, ['/packed']),
+      '/packed': page('Packed', PROSE),
+    });
+    mock.encode('/packed', 'br');
+
+    await crawl(source, { seeds: [`${mock.origin}/`] });
+
+    for (const request of mock.requests) {
+      expect(`${request.url} -> ${request.acceptEncoding}`).toBe(`${request.url} -> gzip, deflate`);
+    }
+
+    // Refused once: asking again cannot change the coding the site sends.
+    expect(mock.requests.filter((request) => request.url === '/packed')).toHaveLength(1);
+    const rows = await source.getRepository(FetchLogEntity).find({ where: { url: `${mock.origin}/packed` } });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.error).toContain('content-encoding "br"');
+    expect(rows[0]!.contentHash).toBeNull();
+
+    expect((await source.getRepository(DocumentEntity).find()).map((d) => d.url)).toEqual([
+      `${mock.origin}/`,
+    ]);
+  });
 });
 
 describe('pages that stop being indexable', () => {

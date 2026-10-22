@@ -47,8 +47,10 @@ describe('request size', () => {
     }
 
     // Derived at boot rather than written down twice.
+    const parsers = await Bun.file(`${import.meta.dir}/../body-parsers.ts`).text();
+    expect(parsers).toContain('requestBodyLimit(buildIndexesConfig().requestUrlLimit)');
     const bootstrap = await Bun.file(`${import.meta.dir}/../main.ts`).text();
-    expect(bootstrap).toContain('requestBodyLimit(buildIndexesConfig().requestUrlLimit)');
+    expect(bootstrap).toContain('useBodyParsers(app)');
   });
 
   it('does not bound how large an index may become', () => {
