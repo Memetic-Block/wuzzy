@@ -1,8 +1,8 @@
-import { BasicCrawler, Configuration } from '@crawlee/basic';
+import { BasicCrawler, Configuration, NonRetryableError } from '@crawlee/basic';
 import type { DataSource } from 'typeorm';
 import { parseHTML } from 'linkedom';
 import { canonicalize } from '../canonicalize/v1';
-import { createFetcher, type Fetcher } from './http';
+import { createFetcher, UnrequestedEncodingError, type Fetcher } from './http';
 import { loadRobots, type RobotsPolicy } from './robots';
 import { recordFailedFetch, recordFetch, type FetchOutcome } from './provenance';
 import { collectSitemapEntries, type SitemapEntry } from './sitemap';
@@ -177,7 +177,10 @@ export async function crawl(dataSource: DataSource, options: CrawlOptions): Prom
       maxRequestsPerCrawl: options.maxRequests,
       maxConcurrency: options.maxConcurrency ?? 4,
       requestHandler: async ({ request, addRequests }) => {
-        const response = await pageFetcher(request.url);
+        const response = await pageFetcher(request.url).catch((error: unknown) => {
+          // Asking again cannot change the coding the origin chose to send.
+          throw error instanceof UnrequestedEncodingError ? new NonRetryableError(error.message) : error;
+        });
         const fetchedAt = new Date();
 
         if (response.blockedRedirect) {

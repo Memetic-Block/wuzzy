@@ -1,12 +1,32 @@
 import { createServer, type Server } from 'node:http';
+import { brotliCompressSync, deflateSync, gzipSync } from 'node:zlib';
+
+export type ContentCoding = 'gzip' | 'deflate' | 'br';
+
+const COMPRESS: Record<ContentCoding, (body: string) => Uint8Array> = {
+  gzip: (body) => gzipSync(body),
+  deflate: (body) => deflateSync(body),
+  br: (body) => brotliCompressSync(body),
+};
+
+export interface MockRequest {
+  readonly url: string;
+  readonly userAgent: string | undefined;
+  readonly acceptEncoding: string | undefined;
+}
 
 export interface MockSite {
   readonly origin: string;
-  /** Every request the site received, in order, with the agent that made it. */
-  readonly requests: { url: string; userAgent: string | undefined }[];
+  /** Every request the site received, in order, with the headers it was sent with. */
+  readonly requests: MockRequest[];
   setPage(path: string, html: string): void;
   /** Makes `path` answer 302 to `target`, for redirect scenarios. */
   redirect(path: string, target: string): void;
+  /**
+   * Makes `path` answer compressed in `coding` whatever the request asked
+   * for, as a server that ignores Accept-Encoding would.
+   */
+  encode(path: string, coding: ContentCoding): void;
   close(): Promise<void>;
 }
 
@@ -14,11 +34,16 @@ export interface MockSite {
 export async function startMockSite(pages: Record<string, string>): Promise<MockSite> {
   const served = { ...pages };
   const redirects: Record<string, string> = {};
-  const requests: { url: string; userAgent: string | undefined }[] = [];
+  const encodings: Record<string, ContentCoding> = {};
+  const requests: MockRequest[] = [];
 
   const server: Server = createServer((request, response) => {
     const path = (request.url ?? '/').split('#')[0] ?? '/';
-    requests.push({ url: path, userAgent: request.headers['user-agent'] });
+    requests.push({
+      url: path,
+      userAgent: request.headers['user-agent'],
+      acceptEncoding: request.headers['accept-encoding'],
+    });
 
     const target = redirects[path];
     if (target !== undefined) {
@@ -38,8 +63,14 @@ export async function startMockSite(pages: Record<string, string>): Promise<Mock
       : path.endsWith('.txt')
         ? 'text/plain'
         : 'text/html; charset=utf-8';
-    response.writeHead(200, { 'content-type': contentType });
-    response.end(body);
+    const coding = encodings[path];
+    if (coding === undefined) {
+      response.writeHead(200, { 'content-type': contentType });
+      response.end(body);
+      return;
+    }
+    response.writeHead(200, { 'content-type': contentType, 'content-encoding': coding });
+    response.end(COMPRESS[coding](body));
   });
 
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -54,6 +85,9 @@ export async function startMockSite(pages: Record<string, string>): Promise<Mock
     },
     redirect: (path, target) => {
       redirects[path] = target;
+    },
+    encode: (path, coding) => {
+      encodings[path] = coding;
     },
     close: () => new Promise<void>((resolve) => server.close(() => resolve())),
   };

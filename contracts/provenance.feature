@@ -74,6 +74,13 @@ Feature: crawl provenance lifecycle
     Then a fetch_log row records the URL and why it was unusable
     And no document row is created for it
 
+  Scenario: a response in an encoding the crawler did not ask for is not decoded
+    Given a page that answers Brotli-compressed whatever the request asks for
+    When the crawler fetches it
+    Then every request asked for gzip or deflate only
+    And a fetch_log row records the URL and the refused encoding
+    And no document row is created for it
+
   Scenario: disallowed URLs are never fetched
     Given a URL disallowed by the site's robots.txt for WuzzyBot
     When seed discovery runs for that site
